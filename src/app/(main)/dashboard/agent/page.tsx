@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/utils";
 import {
   agentApi,
   explorerDeployUrl,
@@ -40,7 +41,7 @@ import {
 } from "@/lib/agent/client";
 import type { RebalanceProposal, PolicyConfig } from "@/lib/rebalance/types";
 
-const PIE_COLORS = ["#2B2644", "#34d399", "#60a5fa", "#f59e0b", "#a78bfa", "#22d3ee"];
+const PIE_COLORS = ["#7C3AED", "#C4B5FD", "#2B2644", "#8B5CF6", "#A78BFA", "#DDD6FE"];
 
 const CARD = "border-black/10 bg-white rounded-2xl shadow-sm";
 
@@ -58,7 +59,7 @@ export default function AgentDashboardPage() {
 
   const refresh = useCallback(async () => {
     try {
-      const [s, snap] = await Promise.all([agentApi.status(), agentApi.snapshot()]);
+      const [s, snap] = await Promise.all([agentApi.status(), agentApi.snapshot(true)]);
       setStatus(s);
       setSnapshot(snap);
       const latest = s.decisions.find((d) => d.proposal);
@@ -172,38 +173,69 @@ export default function AgentDashboardPage() {
   const bestYield = snapshot?.ranked?.[0];
   const network = snapshot?.meta.network ?? "testnet";
   const pieData = positions.map((p) => ({ name: p.protocol, value: p.amountCspr }));
+  const latestDecision = status?.decisions[0];
+  const schedulerLive = !!status?.scheduler?.started;
 
   return (
     <div className="flex flex-col gap-6 px-4 md:px-6 py-6 md:py-8 max-w-[88rem] mx-auto w-full">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-3xl md:text-4xl font-medium tracking-tight text-black" style={{ letterSpacing: "-0.03em" }}>
-            <Bot className="size-8 text-[#2B2644]" />
-            Waffle Trade Agent
-          </h1>
-          <p className="mt-1 text-sm text-black/60">
-            Autonomous yield monitoring, decisions, and rebalancing over MCP on Casper.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-50 text-emerald-700">
-            {network} · era {snapshot?.meta.currentEraId ?? "—"}
-          </Badge>
-          {status?.connectedAccount ? (
-            <Badge variant="secondary" className="border-black/10 bg-black/5 text-black font-mono">
-              {status.connectedAccount.slice(0, 6)}…{status.connectedAccount.slice(-4)}
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="border-black/10 text-black/50">
-              Wallet not connected
-            </Badge>
-          )}
-          <Button size="sm" variant="ghost" className="text-black/60 hover:bg-black/5 hover:text-black" onClick={refresh}>
-            <RefreshCw className="size-4" />
-          </Button>
-        </div>
-      </div>
+      {/* Command center */}
+      <Card className="overflow-hidden rounded-[1.75rem] border-transparent bg-[#241338] text-white shadow-sm">
+        <CardContent className="grid gap-6 p-6 md:p-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+          <div>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <Badge className="border border-white/10 bg-white/10 text-white/75 hover:bg-white/10">
+                <LiveDot tone="light" />
+                <span className="ml-2">{network} · era {snapshot?.meta.currentEraId ?? "—"}</span>
+              </Badge>
+              <Badge className={schedulerLive ? "border border-violet-300/20 bg-violet-300/10 text-violet-100 hover:bg-violet-300/10" : "border border-white/10 bg-white/10 text-white/55 hover:bg-white/10"}>
+                Autonomy loop {schedulerLive ? "live" : "off"}
+              </Badge>
+              {status?.connectedAccount ? (
+                <Badge className="border border-white/10 bg-white/10 font-mono text-white/75 hover:bg-white/10">
+                  {status.connectedAccount.slice(0, 6)}…{status.connectedAccount.slice(-4)}
+                </Badge>
+              ) : (
+                <Badge className="border border-amber-200/20 bg-amber-200/10 text-amber-100 hover:bg-amber-200/10">
+                  Wallet not connected
+                </Badge>
+              )}
+            </div>
+
+            <h1 className="flex items-center gap-3 text-4xl font-medium tracking-tight md:text-5xl" style={{ letterSpacing: "-0.03em" }}>
+              <span className="flex size-12 items-center justify-center rounded-2xl bg-white/10">
+                <Bot className="size-7 text-violet-100" />
+              </span>
+              Waffle Trade Agent
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-white/62 md:text-base">
+              Monitor Casper staking and DEX LP yield, let the agent reason over guardrails, then execute safe moves through MCP and on-chain transaction flows.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="rounded-2xl bg-white/10 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-white/42">Agent state</p>
+              <p className="mt-2 flex items-center gap-2 text-xl font-medium text-white">
+                {status?.running ? <LiveDot tone="light" /> : <span className="size-2.5 rounded-full bg-white/30" />}
+                {status?.running ? "Monitoring" : "Paused"}
+              </p>
+              <p className="mt-1 text-sm text-white/55">
+                {schedulerLive ? `cycle every ${status?.autonomyIntervalSec ?? "—"}s` : "scheduler not started"}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/10 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-white/42">Best yield</p>
+              <p className="mt-2 text-2xl font-medium text-white">{bestYield ? fmtPct(bestYield.apy) : "—"}</p>
+              <p className="mt-1 truncate text-sm text-white/55">{bestYield?.protocol ?? "waiting for market data"}</p>
+            </div>
+            <div className="rounded-2xl bg-white/10 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-white/42">Current proposal</p>
+              <p className="mt-2 text-2xl font-medium text-white">{proposal ? fmtCspr(proposal.amountCspr) : "None"}</p>
+              <p className="mt-1 text-sm text-white/55">{proposal ? `${proposal.signingPath} signing` : latestDecision?.noActionReason ?? "no action required"}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {error && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-50 px-4 py-2 text-sm text-amber-700">
@@ -211,87 +243,84 @@ export default function AgentDashboardPage() {
         </div>
       )}
 
-      {/* Controls */}
+      {/* Control console */}
       <Card className={CARD}>
-        <CardContent className="flex flex-wrap items-center gap-4 py-4">
-          <Button
-            className={status?.running ? "rounded-full bg-red-600 text-white hover:bg-red-700" : "rounded-full bg-black text-white hover:bg-gray-800"}
-            onClick={() => setControl({ running: !status?.running })}
-            disabled={busy || status?.policy.emergencyStop}
-          >
-            {status?.running ? (
-              <>
-                <Square className="mr-2 size-4" /> Stop monitoring
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 size-4" /> Start monitoring
-              </>
-            )}
-          </Button>
-
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-black/60">Mode</Label>
-            <Switch
-              checked={mode === "live"}
-              onCheckedChange={(v) => setMode(v ? "live" : "dry_run")}
+        <CardContent className="grid gap-5 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <ControlTile
+              label="Monitoring"
+              value={status?.running ? "Running" : "Stopped"}
+              sub={status?.policy.emergencyStop ? "blocked by emergency stop" : "server scheduler aware"}
+              active={!!status?.running}
             />
-            <span className="text-sm text-black/70">
-              {mode === "live" ? "Live" : "Dry-run"}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-black/60">Auto-execute</Label>
-            <Switch
-              checked={status?.autoExecute ?? false}
-              onCheckedChange={(v) => setControl({ autoExecute: v })}
+            <ControlTile
+              label="Execution mode"
+              value={mode === "live" ? "Live" : "Dry-run"}
+              sub={status?.autoExecute ? "auto-execute enabled" : "manual execution"}
+              active={mode === "live"}
+            />
+            <ControlTile
+              label="Auto-sign"
+              value={status?.autoSignEnabled ? "Enabled" : "Disabled"}
+              sub={status?.sessionPublicKey ? `${status.sessionPublicKey.slice(0, 8)}…${status.sessionPublicKey.slice(-4)}` : "session key not configured"}
+              active={!!status?.autoSignEnabled}
             />
           </div>
 
-          <Button variant="outline" className="rounded-full bg-white text-black border-black/15 hover:bg-black/5 hover:text-black" onClick={runMonitor} disabled={busy}>
-            <Activity className="mr-2 size-4" /> Run cycle now
-          </Button>
+          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+            <Button
+              className={status?.running ? "rounded-full bg-red-600 text-white hover:bg-red-700" : "rounded-full bg-black text-white hover:bg-gray-800"}
+              onClick={() => setControl({ running: !status?.running })}
+              disabled={busy || status?.policy.emergencyStop}
+            >
+              {status?.running ? (
+                <>
+                  <Square className="mr-2 size-4" /> Stop
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2 size-4" /> Start
+                </>
+              )}
+            </Button>
 
-          <Button
-            variant="outline"
-            className={
-              status?.policy.emergencyStop
-                ? "rounded-full bg-black text-white hover:bg-gray-800 hover:text-white border-transparent"
-                : "rounded-full bg-white border-red-500/40 text-red-600 hover:bg-red-50 hover:text-red-600"
-            }
-            onClick={() => setControl({ emergencyStop: !status?.policy.emergencyStop })}
-            disabled={busy}
-          >
-            <ShieldAlert className="mr-2 size-4" />
-            {status?.policy.emergencyStop ? "Resume (clear stop)" : "Emergency stop"}
-          </Button>
+            <Button variant="outline" className="rounded-full bg-white text-black border-black/15 hover:bg-black/5 hover:text-black" onClick={runMonitor} disabled={busy}>
+              <Activity className="mr-2 size-4" /> Run cycle
+            </Button>
 
-          <Badge variant="outline" className="border-black/10 text-black/60">
-            Auto-sign {status?.autoSignEnabled ? "enabled" : "disabled"}
-          </Badge>
+            <Button size="icon" variant="ghost" className="rounded-full text-black/60 hover:bg-violet-50 hover:text-black" onClick={refresh} disabled={busy}>
+              <RefreshCw className={busy ? "size-4 animate-spin" : "size-4"} />
+            </Button>
+          </div>
 
-          <Badge
-            variant="outline"
-            className={
-              status?.scheduler?.started
-                ? "border-emerald-500/30 bg-emerald-50 text-emerald-700"
-                : "border-black/10 text-black/50"
-            }
-            title={status?.scheduler?.lastSummary ?? undefined}
-          >
-            <span
+          <div className="flex flex-wrap items-center gap-5 border-t border-black/5 pt-4 lg:col-span-2">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-black/60">Live mode</Label>
+              <Switch checked={mode === "live"} onCheckedChange={(v) => setMode(v ? "live" : "dry_run")} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-black/60">Auto-execute</Label>
+              <Switch checked={status?.autoExecute ?? false} onCheckedChange={(v) => setControl({ autoExecute: v })} />
+            </div>
+            <Button
+              variant="outline"
               className={
-                status?.scheduler?.started
-                  ? "mr-1 inline-block size-1.5 rounded-full bg-emerald-500"
-                  : "mr-1 inline-block size-1.5 rounded-full bg-black/30"
+                status?.policy.emergencyStop
+                  ? "rounded-full bg-black text-white hover:bg-gray-800 hover:text-white border-transparent"
+                  : "rounded-full bg-white border-red-500/40 text-red-600 hover:bg-red-50 hover:text-red-600"
               }
-            />
-            Autonomy loop {status?.scheduler?.started ? "live" : "off"}
-            {status?.scheduler?.lastTickAt
-              ? ` · last tick ${new Date(status.scheduler.lastTickAt).toLocaleTimeString()}`
-              : ""}
-          </Badge>
+              onClick={() => setControl({ emergencyStop: !status?.policy.emergencyStop })}
+              disabled={busy}
+            >
+              <ShieldAlert className="mr-2 size-4" />
+              {status?.policy.emergencyStop ? "Resume agent" : "Emergency stop"}
+            </Button>
+            {status?.scheduler?.lastTickAt && (
+              <span className="text-xs text-black/45">
+                Last scheduler tick {new Date(status.scheduler.lastTickAt).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -306,7 +335,7 @@ export default function AgentDashboardPage() {
         </p>
       )}
 
-      {/* Stat cards */}
+      {/* Key metrics */}
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Portfolio value" value={fmtCspr(totalCspr)} sub={`${positions.length} positions`} />
         <StatCard
@@ -376,7 +405,7 @@ export default function AgentDashboardPage() {
                     {v.riskFlags.length ? ` · ${v.riskFlags.join(", ")}` : ""}
                   </p>
                 </div>
-                <span className="ml-3 shrink-0 font-semibold text-emerald-600">{fmtPct(v.apy)}</span>
+                <span className="ml-3 shrink-0 font-semibold text-violet-700">{fmtPct(v.apy)}</span>
               </div>
             ))}
           </CardContent>
@@ -384,10 +413,10 @@ export default function AgentDashboardPage() {
       </div>
 
       {/* Suggested move */}
-      <Card className="rounded-2xl border border-emerald-500/20 bg-emerald-50/50">
+      <Card className="rounded-2xl border border-violet-500/20 bg-violet-50/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg font-medium text-black">
-            <Zap className="size-5 text-emerald-600" /> Suggested move
+            <Zap className="size-5 text-violet-700" /> Suggested move
           </CardTitle>
           <CardDescription className="text-black/50">The agent&apos;s current decision and reasoning</CardDescription>
         </CardHeader>
@@ -397,7 +426,7 @@ export default function AgentDashboardPage() {
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <span className="rounded-md bg-black/5 px-2 py-1 text-black/70">{proposal.fromProtocol}</span>
                 <ArrowRight className="size-4 text-black/40" />
-                <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-700">{proposal.toProtocol}</span>
+                <span className="rounded-md bg-violet-500/10 px-2 py-1 text-violet-700">{proposal.toProtocol}</span>
                 <span className="text-black/60">{fmtCspr(proposal.amountCspr)}</span>
                 <Badge variant="outline" className="border-black/10 text-black/60">
                   {proposal.signingPath === "auto" ? "auto-sign" : "needs approval"}
@@ -518,7 +547,7 @@ export default function AgentDashboardPage() {
                       className={
                         d.llm.verdict === "hold"
                           ? "font-medium text-amber-600"
-                          : "font-medium text-emerald-600"
+                          : "font-medium text-violet-700"
                       }
                     >
                       AI {d.llm.verdict}
@@ -550,7 +579,7 @@ export default function AgentDashboardPage() {
                     variant="outline"
                     className={
                       e.status === "submitted" || e.status === "confirmed"
-                        ? "border-emerald-500/30 text-emerald-700"
+                        ? "border-violet-500/30 text-violet-700"
                         : e.status === "failed" || e.status === "rejected"
                         ? "border-red-500/30 text-red-600"
                         : "border-black/10 text-black/60"
@@ -575,7 +604,7 @@ export default function AgentDashboardPage() {
                           <span
                             className={
                               s.status === "confirmed"
-                                ? "size-1.5 rounded-full bg-emerald-500"
+                                ? "size-1.5 rounded-full bg-violet-500"
                                 : s.status === "failed"
                                 ? "size-1.5 rounded-full bg-red-500"
                                 : s.status === "submitted"
@@ -590,7 +619,7 @@ export default function AgentDashboardPage() {
                             href={explorerDeployUrl(network, s.deployHash)}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                            className="inline-flex items-center gap-1 text-violet-700 hover:underline"
                           >
                             {s.deployHash.slice(0, 8)}… <ExternalLink className="size-3" />
                           </a>
@@ -600,7 +629,7 @@ export default function AgentDashboardPage() {
                       </div>
                     ))}
                     {e.lpTokensReceived && e.lpTokensReceived !== "0" && (
-                      <p className="text-xs text-emerald-600">
+                      <p className="text-xs text-violet-700">
                         LP tokens received ✓
                       </p>
                     )}
@@ -611,7 +640,7 @@ export default function AgentDashboardPage() {
                       href={explorerDeployUrl(network, e.deployHash)}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-violet-700 hover:underline"
                     >
                       {e.deployHash.slice(0, 12)}… <ExternalLink className="size-3" />
                     </a>
@@ -701,10 +730,10 @@ function LiquidityPanel({
   };
 
   return (
-    <Card className="rounded-2xl border border-sky-500/20 bg-sky-50/40">
+    <Card className="rounded-2xl border border-violet-500/20 bg-violet-50/50">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg font-medium text-black">
-          <Droplets className="size-5 text-sky-600" /> Provide liquidity · CSPR.trade
+          <Droplets className="size-5 text-violet-700" /> Provide liquidity · CSPR.trade
         </CardTitle>
         <CardDescription className="text-black/50">
           Enter a CSPR-paired pool directly from CSPR — the agent swaps, approves,
@@ -748,7 +777,7 @@ function LiquidityPanel({
                   }}
                   className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm transition ${
                     selected === p.id
-                      ? "border-sky-500/50 bg-white"
+                      ? "border-violet-500/50 bg-white"
                       : "border-black/5 bg-black/[0.02] hover:border-black/15"
                   }`}
                 >
@@ -758,7 +787,7 @@ function LiquidityPanel({
                       TVL {p.tvl ? fmtCspr(p.tvl) : "—"} · risk {p.riskScore}
                     </span>
                   </span>
-                  <span className="ml-3 shrink-0 font-semibold text-emerald-600">
+                  <span className="ml-3 shrink-0 font-semibold text-violet-700">
                     {fmtPct(p.apy)}
                   </span>
                 </button>
@@ -832,7 +861,7 @@ function LiquidityPanel({
                 few minutes. Steps appear live in Executions below.
               </p>
             )}
-            {msg && <p className="text-sm text-emerald-700">{msg}</p>}
+            {msg && <p className="text-sm text-violet-700">{msg}</p>}
             {sessionPublicKey && (
               <p className="truncate text-xs text-black/40">
                 Signer: {sessionPublicKey.slice(0, 16)}… on {network}
@@ -969,7 +998,7 @@ function WithdrawPanel({
                       ~{p.valueCspr != null ? fmtCspr(p.valueCspr) : "value n/a"}
                     </span>
                   </span>
-                  <span className="ml-3 shrink-0 font-semibold text-emerald-600">
+                  <span className="ml-3 shrink-0 font-semibold text-violet-700">
                     {fmtPct(p.apy)}
                   </span>
                 </button>
@@ -1044,7 +1073,7 @@ function WithdrawPanel({
                 live in Executions below.
               </p>
             )}
-            {msg && <p className="text-sm text-emerald-700">{msg}</p>}
+            {msg && <p className="text-sm text-violet-700">{msg}</p>}
           </>
         )}
         {err && <p className="text-sm text-red-600">{err}</p>}
@@ -1070,10 +1099,47 @@ function StatCard({
         <CardTitle className="text-sm font-medium text-black/50">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className={`text-2xl font-medium ${accent ? "text-emerald-600" : "text-black"}`}>{value}</p>
+        <p className={`text-2xl font-medium ${accent ? "text-violet-700" : "text-black"}`}>{value}</p>
         <p className="truncate text-xs text-black/50">{sub}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function ControlTile({
+  label,
+  value,
+  sub,
+  active,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  active?: boolean;
+}) {
+  return (
+    <div className={cn(
+      "rounded-2xl border px-4 py-3",
+      active ? "border-violet-500/20 bg-violet-50/70" : "border-black/5 bg-black/[0.02]"
+    )}>
+      <p className="text-xs uppercase tracking-[0.14em] text-black/40">{label}</p>
+      <p className="mt-2 flex items-center gap-2 text-lg font-medium text-black">
+        {active ? <LiveDot /> : <span className="size-2.5 rounded-full bg-black/20" />}
+        {value}
+      </p>
+      <p className="mt-1 truncate text-xs text-black/45">{sub}</p>
+    </div>
+  );
+}
+
+function LiveDot({ tone = "dark" }: { tone?: "dark" | "light" }) {
+  const color = tone === "light" ? "bg-violet-300" : "bg-violet-500";
+
+  return (
+    <span className="relative inline-flex size-2.5 shrink-0">
+      <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-55", color)} />
+      <span className={cn("relative inline-flex size-2.5 rounded-full", color)} />
+    </span>
   );
 }
 
@@ -1086,14 +1152,14 @@ function AiVerdict({
   return (
     <div
       className={`rounded-xl border p-3 ${
-        hold ? "border-amber-500/30 bg-amber-50/60" : "border-emerald-500/30 bg-emerald-50/60"
+        hold ? "border-amber-500/30 bg-amber-50/60" : "border-violet-500/20 bg-violet-50/70"
       }`}
     >
       <div className="mb-1 flex items-center gap-2">
-        <Sparkles className={`size-4 ${hold ? "text-amber-600" : "text-emerald-600"}`} />
+        <Sparkles className={`size-4 ${hold ? "text-amber-600" : "text-violet-700"}`} />
         <span className="text-xs font-medium text-black/70">
           AI verdict:{" "}
-          <span className={hold ? "text-amber-600" : "text-emerald-600"}>{llm.verdict}</span>
+          <span className={hold ? "text-amber-600" : "text-violet-700"}>{llm.verdict}</span>
         </span>
         <Badge variant="outline" className="h-4 border-black/10 px-1 text-[10px] text-black/50">
           {(llm.confidence * 100).toFixed(0)}% confident
