@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getState } from "@/lib/agent/store";
 import { isAutoSignEnabled, getSessionPublicKeyHex } from "@/lib/casper/keys";
 import { schedulerStatus } from "@/lib/agent/scheduler";
+import { agentPolicyPackageHash, isAgentPolicyConfigured } from "@/lib/casper/agent-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,10 @@ export async function GET() {
     connectedAccount: state.connectedAccount ?? null,
     autoSignEnabled: await isAutoSignEnabled(),
     sessionPublicKey: await getSessionPublicKeyHex(),
+    onChainPolicy: {
+      configured: isAgentPolicyConfigured(),
+      packageHash: agentPolicyPackageHash(),
+    },
     lastMoveAt: state.lastMoveAt,
     autoExecute: state.autoExecute,
     autonomyIntervalSec: state.autonomyIntervalSec,

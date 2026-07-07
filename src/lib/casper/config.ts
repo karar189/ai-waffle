@@ -67,6 +67,17 @@ export const CSPR_TRADE = {
   wcsprPackageHash: process.env.WCSPR_CONTRACT_PACKAGE_HASH ?? d.wcspr,
 } as const;
 
+/**
+ * Waffle Trade Agent Policy contract.
+ *
+ * This is our own non-custodial policy/audit layer. It stores per-account
+ * automation limits and intent hashes; the existing wallet/session key still
+ * performs the actual staking/LP execution.
+ */
+export const WAFFLE_AGENT_POLICY = {
+  packageHash: process.env.WAFFLE_AGENT_POLICY_PACKAGE_HASH ?? "",
+} as const;
+
 /** Read the CSPR.cloud token, throwing a clear error when it is missing. */
 export function getCsprCloudApiKey(): string {
   const key = process.env.CSPR_CLOUD_API_KEY;

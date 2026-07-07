@@ -22,15 +22,17 @@ It turns a passive Casper wallet into a self-driving portfolio manager: it conti
 1. **Monitor** — pull live, indexed Casper data from **CSPR.cloud** (validators, auction metrics, delegation rewards, DEX swaps) and normalize it into comparable yield snapshots.
 2. **Decide** — rank venues by **risk-adjusted APY**, apply a user-configurable **policy**, run hard **guardrails**, and produce a concrete rebalance proposal with reasoning. An LLM (OpenAI or Claude) reviews the decision and can **veto** it.
 3. **Rebalance** — build a native Casper delegation/redelegation transaction and either **auto-sign** it with a server session key (small moves) or return an **unsigned transaction** for **Casper Wallet** human approval (large moves). Submitted transactions are confirmed on-chain.
+4. **Audit** — when the Waffle Trade Agent Policy contract is configured, auto-signed moves first write an on-chain intent hash to Waffle Trade's own Casper contract.
 
 ---
 
-## The three things this project proves
+## The four things this project proves
 
 | Pillar | How it's proven |
 | --- | --- |
 | **Really on Casper** | All reads come from live **CSPR.cloud** REST APIs (testnet). Positions are the account's **real** liquid balance + delegations. Writes are native `casper-js-sdk` v5 delegate/redelegate transactions submitted to a Casper node RPC, with `cspr.live` explorer links. |
-| **Really using MCP** | The repo **authors its own MCP server** (`mcp-server/server.mjs`) exposing 5 agent tools over stdio, **and** consumes the **hosted CSPR.cloud MCP** server. Any MCP client (Cursor, Claude Desktop, Codex) can drive the full loop. |
+| **Really deploying a contract** | Waffle Trade deploys its own **Agent Policy** contract on Casper testnet. Contract package hash: `892c0d5e717ace4befc2bad6dec3c7633c6ebb2eb97809b82168a3e5b92885a0`. |
+| **Really using MCP** | The repo **authors its own MCP server** (`mcp-server/server.mjs`) exposing 11 agent tools over stdio, **and** can be paired with the hosted **CSPR.cloud MCP** server. Any MCP client (Cursor, Claude Desktop, Codex) can drive the full loop. |
 | **Really autonomous** | A real monitor → decide → rebalance pipeline with policy, guardrails, an LLM verdict layer that can veto, cooldowns, and a hybrid auto/human signing model. A **server-side scheduler** (started at boot via `src/instrumentation.ts`) runs the whole loop unattended — no dashboard required. |
 
 ---
@@ -59,6 +61,7 @@ flowchart TD
         RANK["rebalance/rank + policy + guardrails"]
         LLM["agent/llm\nOpenAI / Claude verdict + veto"]
         DEPLOY["casper/deploy\ntx build + sign + submit"]
+        POLICYCONTRACT["casper/agent-policy\nintent audit + policy calls"]
         STORE["agent/store\nin-memory + JSON persistence"]
     end
 
@@ -74,6 +77,7 @@ flowchart TD
     ORCH --> SNAPSHOTS --> Casper
     ORCH --> RANK
     ORCH --> LLM
+    ORCH --> POLICYCONTRACT --> Casper
     ORCH --> DEPLOY --> Casper
     ORCH --> STORE
     OURS --> API
@@ -123,6 +127,24 @@ flowchart TD
 - **Human path**: larger moves return an **unsigned transaction**; the dashboard signs it with **Casper Wallet** and posts the signature back to `/api/agent/approve`, which reattaches it and submits.
 - `/api/agent/confirm` polls submitted transactions and flips them to `confirmed` / `failed`, with `cspr.live` explorer links as execution proof.
 
+### 4b. On-chain Agent Policy contract
+- `contracts/agent-policy` — Waffle Trade's own Casper contract. It is non-custodial: funds stay in the wallet/session account, while the contract stores automation limits and audit intent hashes.
+- Entry points: `register_policy`, `update_policy`, `pause_policy`, `resume_policy`, `revoke_policy`, `record_intent`.
+- `src/lib/casper/agent-policy.ts` builds contract calls. When `WAFFLE_AGENT_POLICY_PACKAGE_HASH` is set, auto-signed executions record an intent hash on-chain before the staking/LP move.
+- **Deployed on Casper testnet**
+  - Contract package hash / address: `892c0d5e717ace4befc2bad6dec3c7633c6ebb2eb97809b82168a3e5b92885a0`
+  - Contract hash, version 1: `40bef91727b6269c78901f520c30a8e67e8918f4d94b95629dd16df394c26d96`
+  - Install deploy: `db66f58010d200e52651fa60b1e53d8e13190ad5e9c346fc0066c543bce9405b`
+  - Policy registration tx: `45ee5ed6cd47f9ef2e8216fad2906a94bcbb71ea8b4844d7ae7e39703690ade9`
+  - Session/owner account: `01eb3702ce31b925f082a9e4a6d66d99e4c6f8d1d549137c1e0ed8e24d7d6f09fa`
+- Deploy flow:
+  ```bash
+  rustup target add wasm32v1-none --toolchain nightly
+  cargo +nightly build --release --target wasm32v1-none --manifest-path contracts/agent-policy/Cargo.toml
+  node --env-file=.env scripts/deploy-agent-policy.mjs
+  ```
+  The deploy script uses a legacy Casper deploy (`Deploy.makeDeploy` + `putDeploy`) because contract installation calls `add_contract_version`, which must run in an installer/upgrader deploy context. Add the printed package hash to `.env` as `WAFFLE_AGENT_POLICY_PACKAGE_HASH`, then call `POST /api/agent/onchain-policy` with `{ "action": "register" }`.
+
 ### 5. MCP surface
 - **Our server** (`mcp-server/server.mjs`, stdio) exposes 11 tools over the agent API:
   - `get_yield_snapshot` — live risk-adjusted venue ranking
@@ -135,7 +157,7 @@ flowchart TD
   - `get_lp_positions` — LP positions the session account holds (exitable)
   - `quote_lp_withdraw` / `execute_lp_withdraw` — preview and run the LP **exit** saga
 - An LLM can therefore do the full LP lifecycle over MCP: discover pools → enter → check positions → exit.
-- **Hosted CSPR.cloud MCP** is wired in `.cursor/mcp.json` for direct, on-chain data access from the same client.
+- **Hosted CSPR.cloud MCP** can be added alongside the local server for direct, on-chain data access from the same MCP client.
 
 ### 6. Dashboard (`/dashboard/agent`)
 Live view of the agent: current allocation (pie), best yield opportunities, the proposed move + reasoning, the **AI verdict** panel, the decision timeline, execution history with explorer links (each LP saga step links to its transaction), and policy sliders (min yield delta, max allocation, auto-sign limit, risk aversion) plus pause / emergency-stop controls and Casper Wallet connect. Dedicated **Provide liquidity** (enter) and **Exit liquidity** (withdraw) panels drive the CSPR.trade sagas with live on-chain quotes. An **Autonomy loop** badge shows whether the server-side scheduler is live and when it last ticked.
@@ -169,17 +191,20 @@ Disable it with `AGENT_SCHEDULER=off`. The dashboard's 15s polling is now displa
 src/
 ├─ app/
 │  ├─ (main)/dashboard/agent/page.tsx    # the agent dashboard UI
-│  └─ api/agent/                         # snapshot, monitor, execute, approve, confirm, policy, status
+│  └─ api/agent/                         # snapshot, monitor, execute, approve, confirm, policy, onchain-policy, status
 ├─ lib/
-│  ├─ casper/                            # config, csprcloud, positions, normalize, snapshots, deploy, keys
+│  ├─ casper/                            # config, csprcloud, positions, normalize, snapshots, deploy, keys, agent-policy
 │  ├─ rebalance/                         # types, rank, policy, guardrails (decision engine)
 │  └─ agent/                             # orchestrator, store, llm, client
+contracts/
+└─ agent-policy/                         # Waffle Trade Agent Policy Casper contract
 mcp-server/
 ├─ server.mjs                            # our Casper Yield-Router MCP server (stdio)
 └─ test-client.mjs                       # smoke test for the MCP server
 scripts/
-└─ casper-discovery.mjs                  # probe CSPR.cloud endpoints / verify the API key
-.cursor/mcp.json                         # wires our MCP server + hosted CSPR.cloud MCP
+├─ casper-discovery.mjs                  # probe CSPR.cloud endpoints / verify the API key
+├─ deploy-agent-policy.mjs               # install the Agent Policy contract
+└─ read-agent-policy-package.mjs         # read the installed package hash helper
 ```
 
 ---
@@ -195,6 +220,7 @@ scripts/
 | `/approve` | POST | Submit a Casper Wallet-signed tx, or reject a pending move |
 | `/confirm` | POST | Check a submitted tx's on-chain status and finalize the record |
 | `/policy` | POST | Update policy/controls (incl. `autoExecute`, `autonomyIntervalSec` for the background loop); on connect, loads real on-chain positions |
+| `/onchain-policy` | GET/POST | Read Agent Policy contract config, or submit `register`, `update`, `pause`, `resume`, `revoke` transactions |
 | `/lp/quote` · `/lp/execute` | POST | Preview / run the LP **entry** saga (on-chain quoted) |
 | `/lp/positions` | GET | LP positions the session account holds (exitable) |
 | `/lp/withdraw/quote` · `/lp/withdraw/execute` | POST | Preview / run the LP **exit** saga (`remove_liquidity_cspr`) |
@@ -203,7 +229,7 @@ scripts/
 
 ## Setup
 
-**Prerequisites:** Node.js 18+ and a [CSPR.cloud](https://cspr.cloud/) access token (free, testnet).
+**Prerequisites:** Node.js 18+ and a [CSPR.cloud](https://cspr.cloud/) access token (free, testnet). To rebuild/redeploy the Casper contract, install Rust nightly with the `wasm32v1-none` target.
 
 ```bash
 npm install
@@ -224,8 +250,35 @@ cp .env.example .env   # then fill in the values below
 | `AGENT_API_BASE` | – | Base URL the MCP server uses to reach the app (default `http://localhost:3001`). |
 | `WCSPR_CONTRACT_PACKAGE_HASH` | – | WCSPR package hash for LP pricing/execution (testnet built in; set for mainnet). |
 | `CSPR_TRADE_ROUTER_PACKAGE_HASH` | – | CSPR.trade router package for LP execution (testnet built in; set for mainnet). |
+| `WAFFLE_AGENT_POLICY_PACKAGE_HASH` | – | Waffle Trade Agent Policy contract package hash. Enables on-chain policy registration and intent auditing. |
 
 > The agent works read-only with just `CSPR_CLOUD_API_KEY`. Add an LLM key to enable the reasoning/veto layer, and a session key (or use Casper Wallet) to execute real transactions.
+
+### Agent Policy contract
+
+The current testnet deployment is already configured with:
+
+```env
+WAFFLE_AGENT_POLICY_PACKAGE_HASH=892c0d5e717ace4befc2bad6dec3c7633c6ebb2eb97809b82168a3e5b92885a0
+```
+
+To rebuild and redeploy it:
+
+```bash
+rustup target add wasm32v1-none --toolchain nightly
+cargo +nightly build --release --target wasm32v1-none --manifest-path contracts/agent-policy/Cargo.toml
+node --env-file=.env scripts/deploy-agent-policy.mjs
+```
+
+After setting the printed `WAFFLE_AGENT_POLICY_PACKAGE_HASH`, register or update the account policy:
+
+```bash
+curl -X POST http://localhost:3000/api/agent/onchain-policy \
+  -H "Content-Type: application/json" \
+  -d '{"action":"register"}'
+```
+
+Use `{"action":"update"}`, `{"action":"pause"}`, `{"action":"resume"}`, or `{"action":"revoke"}` for lifecycle control.
 
 ### Run
 
@@ -246,9 +299,9 @@ node --env-file=.env scripts/casper-discovery.mjs
 ## Using it from an MCP client (Cursor / Claude Desktop)
 
 1. Start the app (`npm run dev`) so the agent API is live.
-2. `.cursor/mcp.json` already registers two servers:
-   - `casper-yield-router` — our stdio server (`node --env-file=.env mcp-server/server.mjs`)
-   - `cspr_cloud_testnet` — the hosted CSPR.cloud MCP
+2. Register the local MCP server in your client:
+   - `casper-yield-router` — `node --env-file=.env mcp-server/server.mjs`
+   - optional: add the hosted CSPR.cloud MCP server in the same client for direct chain-data tools
 3. In your MCP client, call the tools:
    - **Staking loop:** `get_yield_snapshot`, `get_wallet_state`, `get_agent_status`, `propose_rebalance`, `execute_rebalance`.
    - **LP (CSPR.trade):** `get_lp_pools` (executable CSPR-paired pools), `quote_lp_deposit` (preview split/slippage/gas, read-only), `execute_lp_deposit` (runs the swap → approve → `add_liquidity_cspr` saga). So an LLM can discover, preview, and enter an LP position entirely through MCP.
@@ -267,14 +320,16 @@ node --env-file=.env mcp-server/test-client.mjs
 2. **Monitor** pulls live validator yields from CSPR.cloud and ranks them.
 3. **Decide** proposes a move with reasoning; the LLM adds a verdict (and may veto).
 4. Small move → **auto-signed** and submitted. Large move → **Casper Wallet** approval.
-5. The execution appears in the timeline with a **cspr.live** explorer link, then flips to **confirmed**.
-6. **Provide liquidity · CSPR.trade** → pick a CSPR-paired pool, preview the split, and **Deposit** — the agent runs the swap → approve → `add_liquidity_cspr` saga, each step showing its own explorer link as it confirms, ending with LP tokens in the account.
+5. When the Agent Policy contract is configured, the agent records an on-chain intent hash before auto execution.
+6. The execution appears in the timeline with a **cspr.live** explorer link, then flips to **confirmed**.
+7. **Provide liquidity · CSPR.trade** → pick a CSPR-paired pool, preview the split, and **Deposit** — the agent runs the swap → approve → `add_liquidity_cspr` saga, each step showing its own explorer link as it confirms, ending with LP tokens in the account.
 
 ---
 
 ## Roadmap
 
 - **LP execution routing** — ✅ done. Real CSPR.trade router integration for both **entry** (swap → approve → `add_liquidity_cspr`, proven on testnet) and **exit** (approve → `remove_liquidity_cspr`), with **on-chain quoting** (the router's `get_amounts_out` math applied to fresh reserves + total supply, reported as `reserveSource: live_onchain` with price impact). Next: multi-hop routing and automatic loop-driven LP↔staking rebalancing once held LP positions are tracked as first-class portfolio positions.
+- **Agent Policy contract** — ✅ done. Waffle Trade's own non-custodial Casper contract stores policy metadata and intent hashes. Deployed package hash: `892c0d5e717ace4befc2bad6dec3c7633c6ebb2eb97809b82168a3e5b92885a0`. Next: richer on-chain policy reads in the dashboard.
 - **Background autonomy** — ✅ done. Server-side scheduler runs the monitor → decide → execute loop unattended (no dashboard needed), started at boot via the Next.js instrumentation hook. Next: durable job queue / cron-backed persistence for multi-instance deployments.
 - **x402 / delegated authorization** — scoped, revocable auto-signing grants instead of a raw session key.
 - **Streaming** — CSPR.cloud WebSocket for push-based monitoring.
