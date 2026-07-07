@@ -1,4 +1,18 @@
+import { Bodoni_Moda, Roboto } from "next/font/google";
 import localFont from "next/font/local";
+
+export const roboto = Roboto({
+    subsets: ["latin"],
+    weight: ["300", "400", "500", "700"],
+    variable: "--font-roboto",
+});
+
+export const bodoniModa = Bodoni_Moda({
+    subsets: ["latin"],
+    weight: ["400", "500", "700"],
+    style: ["normal", "italic"],
+    variable: "--font-bodoni",
+});
 
 export const aeonik = localFont({
     src: [
