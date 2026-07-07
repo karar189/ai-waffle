@@ -121,11 +121,24 @@ export interface Account {
 }
 
 export interface FungibleTokenOwnership {
-  account_hash: string;
+  owner_hash: string;
   contract_package_hash: string;
+  /** 0 = account, 1 = contract. */
+  owner_type: number;
   balance: string;
-  decimals?: number;
-  symbol?: string;
+}
+
+/** Contract package metadata (fungible tokens expose name/symbol/decimals). */
+export interface ContractPackage {
+  contract_package_hash: string;
+  name?: string;
+  metadata?: {
+    name?: string;
+    symbol?: string;
+    decimals?: number;
+    balances_uref?: string;
+    total_supply_uref?: string;
+  };
 }
 
 export interface Deploy {
@@ -334,6 +347,41 @@ export async function getFungibleTokenOwnership(
       signal: opts.signal,
     }
   );
+}
+
+/**
+ * Token holders for a fungible token contract package, sorted by balance desc.
+ * Used to read AMM pool reserves: a pair's reserve of a token is the balance
+ * held by the pair contract package hash (which is the `owner_hash`).
+ */
+export async function getContractPackageTokenOwnership(
+  tokenContractPackageHash: string,
+  opts: { page?: number; pageSize?: number; signal?: AbortSignal } = {}
+): Promise<CsprCloudPaginated<FungibleTokenOwnership>> {
+  return csprFetch<CsprCloudPaginated<FungibleTokenOwnership>>(
+    `/contract-packages/${tokenContractPackageHash}/ft-token-ownership`,
+    {
+      params: {
+        page: opts.page ?? 1,
+        page_size: opts.pageSize ?? 250,
+        order_by: "balance",
+        order_direction: "DESC",
+      },
+      signal: opts.signal,
+    }
+  );
+}
+
+/** Fetch a contract package (fungible tokens expose name/symbol/decimals). */
+export async function getContractPackage(
+  contractPackageHash: string,
+  signal?: AbortSignal
+): Promise<ContractPackage> {
+  const res = await csprFetch<CsprCloudResponse<ContractPackage>>(
+    `/contract-packages/${contractPackageHash}`,
+    { signal }
+  );
+  return res.data;
 }
 
 /** Active delegations (staked positions) for an account. */

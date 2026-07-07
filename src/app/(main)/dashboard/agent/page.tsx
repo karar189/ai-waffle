@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
   Bot,
@@ -12,6 +12,9 @@ import {
   ExternalLink,
   RefreshCw,
   Sparkles,
+  Droplets,
+  Loader2,
+  LogOut,
 } from "lucide-react";
 import {
   Pie,
@@ -30,11 +33,14 @@ import {
   explorerDeployUrl,
   type AgentStatus,
   type SnapshotDto,
+  type RankedVenueDto,
+  type LpQuoteDto,
+  type HeldLpPositionDto,
+  type LpWithdrawQuoteDto,
 } from "@/lib/agent/client";
 import type { RebalanceProposal, PolicyConfig } from "@/lib/rebalance/types";
 
 const PIE_COLORS = ["#2B2644", "#34d399", "#60a5fa", "#f59e0b", "#a78bfa", "#22d3ee"];
-const MONITOR_INTERVAL_MS = 15000;
 
 const CARD = "border-black/10 bg-white rounded-2xl shadow-sm";
 
@@ -47,10 +53,8 @@ export default function AgentDashboardPage() {
   const [snapshot, setSnapshot] = useState<SnapshotDto | null>(null);
   const [proposal, setProposal] = useState<RebalanceProposal | null>(null);
   const [mode, setMode] = useState<"dry_run" | "live">("dry_run");
-  const [autoExecute, setAutoExecute] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -70,33 +74,28 @@ export default function AgentDashboardPage() {
     }
   }, []);
 
+  // Manual "run one cycle now" — the autonomous loop itself runs server-side.
   const runMonitor = useCallback(async () => {
+    setBusy(true);
     try {
-      const res = await agentApi.monitor(mode, autoExecute);
+      const res = await agentApi.monitor(mode, mode === "live" && !!status?.autoExecute);
       setProposal(res.proposal);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "monitor failed");
+    } finally {
+      setBusy(false);
     }
-  }, [mode, autoExecute, refresh]);
+  }, [mode, status?.autoExecute, refresh]);
 
+  // Display refresh only. Monitor -> decide -> execute now runs in the
+  // server-side scheduler (src/lib/agent/scheduler.ts), so it keeps going even
+  // with this dashboard closed. Here we just poll for fresh state to render.
   useEffect(() => {
     refresh();
     const poll = setInterval(refresh, 10000);
     return () => clearInterval(poll);
   }, [refresh]);
-
-  // Autonomous monitoring loop.
-  useEffect(() => {
-    if (timer.current) clearInterval(timer.current);
-    if (status?.running) {
-      runMonitor();
-      timer.current = setInterval(runMonitor, MONITOR_INTERVAL_MS);
-    }
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
-  }, [status?.running, runMonitor]);
 
   const setControl = async (body: Parameters<typeof agentApi.updatePolicy>[0]) => {
     setBusy(true);
@@ -244,7 +243,10 @@ export default function AgentDashboardPage() {
 
           <div className="flex items-center gap-2">
             <Label className="text-xs text-black/60">Auto-execute</Label>
-            <Switch checked={autoExecute} onCheckedChange={setAutoExecute} />
+            <Switch
+              checked={status?.autoExecute ?? false}
+              onCheckedChange={(v) => setControl({ autoExecute: v })}
+            />
           </div>
 
           <Button variant="outline" className="rounded-full bg-white text-black border-black/15 hover:bg-black/5 hover:text-black" onClick={runMonitor} disabled={busy}>
@@ -268,8 +270,41 @@ export default function AgentDashboardPage() {
           <Badge variant="outline" className="border-black/10 text-black/60">
             Auto-sign {status?.autoSignEnabled ? "enabled" : "disabled"}
           </Badge>
+
+          <Badge
+            variant="outline"
+            className={
+              status?.scheduler?.started
+                ? "border-emerald-500/30 bg-emerald-50 text-emerald-700"
+                : "border-black/10 text-black/50"
+            }
+            title={status?.scheduler?.lastSummary ?? undefined}
+          >
+            <span
+              className={
+                status?.scheduler?.started
+                  ? "mr-1 inline-block size-1.5 rounded-full bg-emerald-500"
+                  : "mr-1 inline-block size-1.5 rounded-full bg-black/30"
+              }
+            />
+            Autonomy loop {status?.scheduler?.started ? "live" : "off"}
+            {status?.scheduler?.lastTickAt
+              ? ` · last tick ${new Date(status.scheduler.lastTickAt).toLocaleTimeString()}`
+              : ""}
+          </Badge>
         </CardContent>
       </Card>
+
+      {status?.scheduler?.started && (
+        <p className="-mt-2 px-1 text-xs text-black/50">
+          Server-side scheduler runs the monitor → decide → execute loop every{" "}
+          {status.autonomyIntervalSec}s{" "}
+          {status.running ? "(active)" : "(waiting for Start monitoring)"} — it keeps
+          running even with this tab closed.
+          {status.scheduler.lastSummary ? ` Last: ${status.scheduler.lastSummary}.` : ""}
+          {status.scheduler.lastError ? ` ⚠ ${status.scheduler.lastError}` : ""}
+        </p>
+      )}
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-3">
@@ -439,6 +474,20 @@ export default function AgentDashboardPage() {
         </CardContent>
       </Card>
 
+      {/* LP execution (CSPR.trade router) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <LiquidityPanel
+          network={network}
+          autoSignEnabled={status?.autoSignEnabled ?? false}
+          sessionPublicKey={status?.sessionPublicKey ?? null}
+          onExecuted={refresh}
+        />
+        <WithdrawPanel
+          autoSignEnabled={status?.autoSignEnabled ?? false}
+          onExecuted={refresh}
+        />
+      </div>
+
       {/* Timeline + executions */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className={CARD}>
@@ -511,17 +560,62 @@ export default function AgentDashboardPage() {
                   </Badge>
                 </div>
                 <p className="text-xs text-black/50">
-                  {fmtCspr(e.amountCspr)} · {e.signingPath}
+                  {fmtCspr(e.amountCspr)} ·{" "}
+                  {e.kind === "lp"
+                    ? "LP deposit saga"
+                    : e.kind === "lp_exit"
+                    ? "LP exit saga"
+                    : e.signingPath}
                 </p>
-                {e.deployHash && (
-                  <a
-                    href={explorerDeployUrl(network, e.deployHash)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                  >
-                    {e.deployHash.slice(0, 12)}… <ExternalLink className="size-3" />
-                  </a>
+                {e.steps?.length ? (
+                  <div className="mt-2 space-y-1">
+                    {e.steps.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="flex items-center gap-1 text-black/60">
+                          <span
+                            className={
+                              s.status === "confirmed"
+                                ? "size-1.5 rounded-full bg-emerald-500"
+                                : s.status === "failed"
+                                ? "size-1.5 rounded-full bg-red-500"
+                                : s.status === "submitted"
+                                ? "size-1.5 rounded-full bg-amber-500"
+                                : "size-1.5 rounded-full bg-black/20"
+                            }
+                          />
+                          {s.label}
+                        </span>
+                        {s.deployHash ? (
+                          <a
+                            href={explorerDeployUrl(network, s.deployHash)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                          >
+                            {s.deployHash.slice(0, 8)}… <ExternalLink className="size-3" />
+                          </a>
+                        ) : (
+                          <span className="text-black/30">{s.status}</span>
+                        )}
+                      </div>
+                    ))}
+                    {e.lpTokensReceived && e.lpTokensReceived !== "0" && (
+                      <p className="text-xs text-emerald-600">
+                        LP tokens received ✓
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  e.deployHash && (
+                    <a
+                      href={explorerDeployUrl(network, e.deployHash)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                    >
+                      {e.deployHash.slice(0, 12)}… <ExternalLink className="size-3" />
+                    </a>
+                  )
                 )}
                 {e.error && <p className="mt-1 text-xs text-red-600">{e.error}</p>}
               </div>
@@ -533,6 +627,429 @@ export default function AgentDashboardPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function LiquidityPanel({
+  network,
+  autoSignEnabled,
+  sessionPublicKey,
+  onExecuted,
+}: {
+  network: string;
+  autoSignEnabled: boolean;
+  sessionPublicKey: string | null;
+  onExecuted: () => void;
+}) {
+  const [pools, setPools] = useState<RankedVenueDto[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [amount, setAmount] = useState(10);
+  const [quote, setQuote] = useState<LpQuoteDto | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const loadPools = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const snap = await agentApi.snapshot(true);
+      const lp = snap.ranked.filter(
+        (r) =>
+          r.kind === "lp" && r.riskFlags.includes("lp_execution_session_key_saga")
+      );
+      setPools(lp);
+      if (lp[0]) setSelected(lp[0].id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed to load LP pools");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const preview = async () => {
+    if (!selected) return;
+    setErr(null);
+    setMsg(null);
+    try {
+      setQuote(await agentApi.lpQuote(selected, amount));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "quote failed");
+    }
+  };
+
+  const deposit = async () => {
+    if (!selected) return;
+    setErr(null);
+    setMsg(null);
+    setRunning(true);
+    try {
+      const res = await agentApi.lpExecute(selected, amount);
+      const ok = res.execution.status === "confirmed";
+      setMsg(
+        ok
+          ? "LP position opened — swap → approve → add_liquidity all confirmed on-chain."
+          : `Saga ended with status: ${res.execution.status}. See executions for details.`
+      );
+      onExecuted();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "LP deposit failed");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Card className="rounded-2xl border border-sky-500/20 bg-sky-50/40">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg font-medium text-black">
+          <Droplets className="size-5 text-sky-600" /> Provide liquidity · CSPR.trade
+        </CardTitle>
+        <CardDescription className="text-black/50">
+          Enter a CSPR-paired pool directly from CSPR — the agent swaps, approves,
+          and calls <code className="text-xs">add_liquidity_cspr</code> via the router.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!autoSignEnabled && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            LP execution runs the multi-step router saga with the server session
+            key. Configure a funded session key to enable it.
+          </p>
+        )}
+
+        {!pools ? (
+          <Button
+            variant="outline"
+            className="rounded-full border-black/10"
+            onClick={loadPools}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" /> Reading on-chain reserves…
+              </>
+            ) : (
+              "Load executable LP pools"
+            )}
+          </Button>
+        ) : pools.length === 0 ? (
+          <p className="text-sm text-black/50">No CSPR-paired executable pools found.</p>
+        ) : (
+          <>
+            <div className="grid gap-2">
+              {pools.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    setSelected(p.id);
+                    setQuote(null);
+                  }}
+                  className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm transition ${
+                    selected === p.id
+                      ? "border-sky-500/50 bg-white"
+                      : "border-black/5 bg-black/[0.02] hover:border-black/15"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-black/80">{p.protocol}</span>
+                    <span className="text-xs text-black/50">
+                      TVL {p.tvl ? fmtCspr(p.tvl) : "—"} · risk {p.riskScore}
+                    </span>
+                  </span>
+                  <span className="ml-3 shrink-0 font-semibold text-emerald-600">
+                    {fmtPct(p.apy)}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <Label className="text-xs text-black/50">Amount (CSPR)</Label>
+                <input
+                  type="number"
+                  min={1}
+                  value={amount}
+                  onChange={(e) => {
+                    setAmount(Math.max(1, Number(e.target.value)));
+                    setQuote(null);
+                  }}
+                  className="mt-1 w-32 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
+                />
+              </div>
+              <Button
+                variant="outline"
+                className="rounded-full border-black/10"
+                onClick={preview}
+                disabled={running}
+              >
+                Preview
+              </Button>
+              <Button
+                className="rounded-full bg-black text-white hover:bg-gray-800"
+                onClick={deposit}
+                disabled={running || !autoSignEnabled}
+              >
+                {running ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" /> Running saga…
+                  </>
+                ) : (
+                  "Deposit into pool"
+                )}
+              </Button>
+            </div>
+
+            {quote && (
+              <div className="rounded-xl border border-black/5 bg-white p-3 text-sm">
+                <p className="text-black/70">
+                  Swap <b>{quote.plan.swapCspr} CSPR</b> → ~
+                  {(
+                    Number(quote.plan.expectedTokenOut) /
+                    Math.pow(10, quote.pool.tokenDecimals)
+                  ).toLocaleString(undefined, { maximumFractionDigits: 6 })}{" "}
+                  {quote.plan.tokenSymbol}, then pair with{" "}
+                  <b>{quote.plan.liquidityCspr} CSPR</b>.
+                </p>
+                <p className="mt-1 text-xs text-black/50">
+                  Slippage {quote.plan.slippageBps / 100}% · price impact ~
+                  {(quote.plan.priceImpactBps / 100).toFixed(2)}% · est. gas ~
+                  {quote.plan.estGasCspr} CSPR across 3 transactions
+                </p>
+                <p className="mt-1 text-[11px] text-black/40">
+                  {quote.plan.reserveSource === "live_onchain"
+                    ? "Priced from fresh on-chain reserves (router get_amounts_out)."
+                    : "Priced from cached snapshot reserves."}
+                </p>
+              </div>
+            )}
+
+            {running && (
+              <p className="text-xs text-black/50">
+                Signing and confirming three transactions on-chain — this takes a
+                few minutes. Steps appear live in Executions below.
+              </p>
+            )}
+            {msg && <p className="text-sm text-emerald-700">{msg}</p>}
+            {sessionPublicKey && (
+              <p className="truncate text-xs text-black/40">
+                Signer: {sessionPublicKey.slice(0, 16)}… on {network}
+              </p>
+            )}
+          </>
+        )}
+        {err && <p className="text-sm text-red-600">{err}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WithdrawPanel({
+  autoSignEnabled,
+  onExecuted,
+}: {
+  autoSignEnabled: boolean;
+  onExecuted: () => void;
+}) {
+  const [positions, setPositions] = useState<HeldLpPositionDto[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [percent, setPercent] = useState(100);
+  const [quote, setQuote] = useState<LpWithdrawQuoteDto | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const loadPositions = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await agentApi.lpPositions();
+      setPositions(res.positions);
+      if (res.positions[0]) setSelected(res.positions[0].venueId);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed to load LP positions");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const preview = async () => {
+    if (!selected) return;
+    setErr(null);
+    setMsg(null);
+    try {
+      setQuote(await agentApi.lpWithdrawQuote(selected, percent));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "quote failed");
+    }
+  };
+
+  const withdraw = async () => {
+    if (!selected) return;
+    setErr(null);
+    setMsg(null);
+    setRunning(true);
+    try {
+      const res = await agentApi.lpWithdrawExecute(selected, percent);
+      const ok = res.execution.status === "confirmed";
+      setMsg(
+        ok
+          ? "LP position exited — approve → remove_liquidity_cspr confirmed; CSPR + token returned to the wallet."
+          : `Exit ended with status: ${res.execution.status}. See executions for details.`
+      );
+      onExecuted();
+      await loadPositions();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "LP exit failed");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Card className="rounded-2xl border border-amber-500/20 bg-amber-50/40">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg font-medium text-black">
+          <LogOut className="size-5 text-amber-600" /> Exit liquidity · CSPR.trade
+        </CardTitle>
+        <CardDescription className="text-black/50">
+          Burn LP tokens and withdraw back to CSPR — the agent approves the router
+          and calls <code className="text-xs">remove_liquidity_cspr</code>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!autoSignEnabled && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            LP exit runs the router saga with the server session key. Configure a
+            funded session key to enable it.
+          </p>
+        )}
+
+        {!positions ? (
+          <Button
+            variant="outline"
+            className="rounded-full border-black/10"
+            onClick={loadPositions}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" /> Reading LP holdings…
+              </>
+            ) : (
+              "Load my LP positions"
+            )}
+          </Button>
+        ) : positions.length === 0 ? (
+          <p className="text-sm text-black/50">
+            No LP positions held by the session account.
+          </p>
+        ) : (
+          <>
+            <div className="grid gap-2">
+              {positions.map((p) => (
+                <button
+                  key={p.venueId}
+                  onClick={() => {
+                    setSelected(p.venueId);
+                    setQuote(null);
+                  }}
+                  className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm transition ${
+                    selected === p.venueId
+                      ? "border-amber-500/50 bg-white"
+                      : "border-black/5 bg-black/[0.02] hover:border-black/15"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-black/80">{p.protocol}</span>
+                    <span className="text-xs text-black/50">
+                      ~{p.valueCspr != null ? fmtCspr(p.valueCspr) : "value n/a"}
+                    </span>
+                  </span>
+                  <span className="ml-3 shrink-0 font-semibold text-emerald-600">
+                    {fmtPct(p.apy)}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <Label className="text-xs text-black/50">Withdraw %</Label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={percent}
+                  onChange={(e) => {
+                    setPercent(Math.max(1, Math.min(100, Number(e.target.value))));
+                    setQuote(null);
+                  }}
+                  className="mt-1 w-24 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm"
+                />
+              </div>
+              <Button
+                variant="outline"
+                className="rounded-full border-black/10"
+                onClick={preview}
+                disabled={running}
+              >
+                Preview
+              </Button>
+              <Button
+                className="rounded-full bg-black text-white hover:bg-gray-800"
+                onClick={withdraw}
+                disabled={running || !autoSignEnabled}
+              >
+                {running ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" /> Running exit…
+                  </>
+                ) : (
+                  "Withdraw from pool"
+                )}
+              </Button>
+            </div>
+
+            {quote && (
+              <div className="rounded-xl border border-black/5 bg-white p-3 text-sm">
+                <p className="text-black/70">
+                  Burn <b>{quote.plan.poolShare > 0 ? `${(quote.plan.poolShare * 100).toFixed(4)}%` : ""} of pool</b> →
+                  receive ~<b>{quote.plan.expectedCspr.toFixed(2)} CSPR</b> +{" "}
+                  {(
+                    Number(quote.plan.expectedTokenOut) /
+                    Math.pow(10, quote.pool.tokenDecimals)
+                  ).toLocaleString(undefined, { maximumFractionDigits: 6 })}{" "}
+                  {quote.plan.tokenSymbol}.
+                </p>
+                <p className="mt-1 text-xs text-black/50">
+                  Min {quote.plan.minCspr.toFixed(2)} CSPR · slippage{" "}
+                  {quote.plan.slippageBps / 100}% · est. gas ~{quote.plan.estGasCspr}{" "}
+                  CSPR across 2 transactions
+                </p>
+                <p className="mt-1 text-[11px] text-black/40">
+                  {quote.plan.reserveSource === "live_onchain"
+                    ? "Priced from fresh on-chain reserves + LP total supply."
+                    : "Priced from cached snapshot reserves."}
+                </p>
+              </div>
+            )}
+
+            {running && (
+              <p className="text-xs text-black/50">
+                Signing and confirming two transactions on-chain. Steps appear
+                live in Executions below.
+              </p>
+            )}
+            {msg && <p className="text-sm text-emerald-700">{msg}</p>}
+          </>
+        )}
+        {err && <p className="text-sm text-red-600">{err}</p>}
+      </CardContent>
+    </Card>
   );
 }
 

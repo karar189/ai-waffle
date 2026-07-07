@@ -31,7 +31,7 @@ It turns a passive Casper wallet into a self-driving portfolio manager: it conti
 | --- | --- |
 | **Really on Casper** | All reads come from live **CSPR.cloud** REST APIs (testnet). Positions are the account's **real** liquid balance + delegations. Writes are native `casper-js-sdk` v5 delegate/redelegate transactions submitted to a Casper node RPC, with `cspr.live` explorer links. |
 | **Really using MCP** | The repo **authors its own MCP server** (`mcp-server/server.mjs`) exposing 5 agent tools over stdio, **and** consumes the **hosted CSPR.cloud MCP** server. Any MCP client (Cursor, Claude Desktop, Codex) can drive the full loop. |
-| **Really autonomous** | A real monitor → decide → rebalance pipeline with policy, guardrails, an LLM verdict layer that can veto, cooldowns, and a hybrid auto/human signing model. |
+| **Really autonomous** | A real monitor → decide → rebalance pipeline with policy, guardrails, an LLM verdict layer that can veto, cooldowns, and a hybrid auto/human signing model. A **server-side scheduler** (started at boot via `src/instrumentation.ts`) runs the whole loop unattended — no dashboard required. |
 
 ---
 
@@ -89,9 +89,23 @@ flowchart TD
 ### 1. Data layer — real Casper via CSPR.cloud
 - `src/lib/casper/csprcloud.ts` — typed REST client for CSPR.cloud (validators, auction metrics, delegator rewards, DEXes, swaps, accounts, delegations, deploys).
 - `src/lib/casper/positions.ts` — reads an account's **real** liquid balance + every active delegation and maps them into agent positions.
-- `src/lib/casper/normalize.ts` + `snapshots.ts` — derive comparable APYs:
+- `src/lib/casper/normalize.ts` + `snapshots.ts` + `reserves.ts` — derive comparable APYs:
   - **Staking APY** = network gross staking APY (derived from the connected account's *own* reward stream ÷ its *own* delegated stake) minus each validator's commission.
-  - **LP/DEX** venues are computed from swap volume and flagged as informational (`apy_is_fee_intensity_not_comparable`) — off by default until pool reserves are wired.
+  - **LP/DEX APY** = real, reserve-based. `reserves.ts` reads a pool's on-chain reserves (a pair's token balance = the balance held by the pair contract package hash via CSPR.cloud `ft-token-ownership`), prices **both** sides in CSPR (WCSPR = 1; every other token via its latest DEX rate against WCSPR), and computes `TVL = Σ(reserve × priceInCspr)` and `APY = annualized trailing fees / TVL`. When only one side can be priced it falls back to the AMM equal-value identity (`TVL ≈ 2 × known side`); if nothing can be priced the APY is zeroed so it never pollutes the ranking.
+  - Every CSPR-paired LP snapshot also carries **executable** metadata (`lp`: token hash, decimals, on-chain reserves) tagged `lp_execution_session_key_saga`, so LP venues are not just rankable — the agent can actually enter them (see the LP execution layer below). Non-CSPR pairs stay ranking-only (`lp_execution_unavailable_non_cspr_pair`).
+
+### 1b. LP execution — real CSPR.trade router integration (enter **and** exit)
+- `src/lib/casper/dex.ts` — builds every transaction the agent needs:
+  - **enter**: `swap_exact_cspr_for_tokens`, CEP-18 `approve`, `add_liquidity_cspr`. CSPR.trade is a Uniswap-V2-style AMM; sending native CSPR into the router requires its `proxy_caller` session WASM (`src/lib/casper/wasm/proxy_caller.wasm`) that funds a purse and forwards the call. The router package/entry-point signatures and the packed `List<U8>` argument encoding were reverse-engineered from a live on-chain call and verified byte-for-byte via `query_global_state`.
+  - **exit**: `approve` (on the LP/pair token) + `remove_liquidity_cspr`. Exiting attaches **no** CSPR (value flows out), so it's a **direct** router call, not a `proxy_caller` session.
+- **On-chain quoting**: `quoteAmountOut` / `quoteRemoveLiquidity` / `priceImpactBps` replicate the router's `get_amounts_out` math and are applied to reserves **re-read fresh at quote/execute time** (`readLivePairReserves`, `readPairTotalSupply` in `reserves.ts`). Casper has no `eth_call`-style read-only contract call, so exact pricing means running the same constant-product formula the router uses against current on-chain reserves. Quotes report `reserveSource: "live_onchain"` and an estimated `priceImpactBps`.
+- `src/lib/agent/lp.ts`:
+  - **deposit saga**: swap half the CSPR → approve the router → `add_liquidity_cspr`. Each step is signed with the session key and confirmed on-chain before the next runs (steps 2–3 depend on the swap output).
+  - **exit saga**: approve the router on the LP token → `remove_liquidity_cspr`, burning `percent` (or explicit `liquidity`) of the held LP and returning the paired token + native CSPR to the wallet, quoted pro-rata against fresh reserves × total supply.
+  - `getHeldLpPositions` surfaces the LP positions the session account actually holds (with a rough CSPR value), so exits are discoverable.
+- Endpoints: `POST /api/agent/lp/quote` + `/execute` (enter), `GET /api/agent/lp/positions`, `POST /api/agent/lp/withdraw/quote` + `/withdraw/execute` (exit) — all guarded by pause/stop/allowed-kinds/max-move. The orchestrator routes any `lp:` rebalance **destination** into the deposit saga and any `lp:` **source** into the exit saga.
+- **Proven on testnet** (session key `01eb3702…`): swap [`21e2eda7…`], approve [`0e30e69a…`], `add_liquidity_cspr` [`30eb71a8…`] → LP tokens received. Because a full entry is three transactions, LP execution is **session-key only** (three wallet pop-ups with on-chain waits would be impractical for the human-approval path).
+- ⚠️ Trust note: `proxy_caller.wasm` is CSPR.trade's session binary, vendored from a public reference implementation. It sits in the signing path, so for mainnet replace it with the official binary from CSPR.trade.
 
 ### 2. Decision engine
 - `src/lib/rebalance/rank.ts` — `riskAdjustedApy` and `rankVenues` sort venues by yield discounted for risk (`riskAversion`).
@@ -110,16 +124,32 @@ flowchart TD
 - `/api/agent/confirm` polls submitted transactions and flips them to `confirmed` / `failed`, with `cspr.live` explorer links as execution proof.
 
 ### 5. MCP surface
-- **Our server** (`mcp-server/server.mjs`, stdio) exposes 5 tools over the agent API:
+- **Our server** (`mcp-server/server.mjs`, stdio) exposes 11 tools over the agent API:
   - `get_yield_snapshot` — live risk-adjusted venue ranking
   - `get_wallet_state` — allocation, positions, connected account, auto-sign status
   - `get_agent_status` — policy, positions, decision log, executions
   - `propose_rebalance` — run one monitor → decide cycle (no execution)
   - `execute_rebalance` — execute/prepare a proposal (auto-sign or return unsigned tx)
+  - `get_lp_pools` — executable CSPR-paired pools with real reserves + APY
+  - `quote_lp_deposit` / `execute_lp_deposit` — preview and run the LP **entry** saga
+  - `get_lp_positions` — LP positions the session account holds (exitable)
+  - `quote_lp_withdraw` / `execute_lp_withdraw` — preview and run the LP **exit** saga
+- An LLM can therefore do the full LP lifecycle over MCP: discover pools → enter → check positions → exit.
 - **Hosted CSPR.cloud MCP** is wired in `.cursor/mcp.json` for direct, on-chain data access from the same client.
 
 ### 6. Dashboard (`/dashboard/agent`)
-Live view of the agent: current allocation (pie), best yield opportunities, the proposed move + reasoning, the **AI verdict** panel, the decision timeline, execution history with explorer links, and policy sliders (min yield delta, max allocation, auto-sign limit, risk aversion) plus pause / emergency-stop controls and Casper Wallet connect.
+Live view of the agent: current allocation (pie), best yield opportunities, the proposed move + reasoning, the **AI verdict** panel, the decision timeline, execution history with explorer links (each LP saga step links to its transaction), and policy sliders (min yield delta, max allocation, auto-sign limit, risk aversion) plus pause / emergency-stop controls and Casper Wallet connect. Dedicated **Provide liquidity** (enter) and **Exit liquidity** (withdraw) panels drive the CSPR.trade sagas with live on-chain quotes. An **Autonomy loop** badge shows whether the server-side scheduler is live and when it last ticked.
+
+### 7. Background autonomy (`src/instrumentation.ts` + `src/lib/agent/scheduler.ts`)
+This is what makes the agent genuinely **self-driving**. A server-side scheduler starts on server boot (via Next.js's instrumentation hook) and runs the full **monitor → decide → execute** cycle on a fixed interval **with no dashboard open**:
+
+- Ticks every `autonomyIntervalSec` (default 60s; editable at runtime via `/policy`).
+- Only acts when the agent is `running` and not paused / emergency-stopped.
+- Executes (not just decides) only when the persisted `autoExecute` flag is on — and then only for auto-signable, non-vetoed proposals; all normal guardrails still apply.
+- Never overlaps ticks (a long LP saga won't be re-entered), and reports health (`lastTickAt`, `lastSummary`, `lastError`, `tickCount`) through `/status`.
+- Because the scheduler and API routes run in separate bundles, the JSON state file is the shared source of truth (mtime-based reload), so dashboard toggles and scheduler writes stay in sync.
+
+Disable it with `AGENT_SCHEDULER=off`. The dashboard's 15s polling is now display-only; the loop itself runs on the server.
 
 ---
 
@@ -128,7 +158,7 @@ Live view of the agent: current allocation (pie), best yield opportunities, the 
 - **Guardrails** — max move size, per-venue allocation cap, cooldown between moves, minimum remaining liquidity.
 - **Auto-sign limit** — only small moves auto-execute; anything larger requires explicit Casper Wallet approval.
 - **LLM veto** — the reasoning layer can block a move it considers unsound.
-- **Pause / emergency stop** — global kill switches; emergency stop also halts the run loop.
+- **Pause / emergency stop** — global kill switches; emergency stop also halts the run loop (including the background scheduler).
 - **Secrets stay server-side** — the CSPR.cloud token, LLM keys, and any session key are never exposed to the browser.
 
 ---
@@ -159,12 +189,15 @@ scripts/
 | Route | Method | Purpose |
 | --- | --- | --- |
 | `/snapshot` | GET | Normalized, risk-adjusted venue ranking (`?validators=8&lp=true&ref=<pk>`) |
-| `/status` | GET | Full agent state: policy, positions, decisions, executions |
+| `/status` | GET | Full agent state: policy, positions, decisions, executions, and background **scheduler** health |
 | `/monitor` | POST | Run one monitor → decide cycle (`{ mode, autoExecute }`); optionally auto-execute |
 | `/execute` | POST | Execute/prepare a proposal (auto-sign or return unsigned tx) |
 | `/approve` | POST | Submit a Casper Wallet-signed tx, or reject a pending move |
 | `/confirm` | POST | Check a submitted tx's on-chain status and finalize the record |
-| `/policy` | POST | Update policy/controls; on connect, loads real on-chain positions |
+| `/policy` | POST | Update policy/controls (incl. `autoExecute`, `autonomyIntervalSec` for the background loop); on connect, loads real on-chain positions |
+| `/lp/quote` · `/lp/execute` | POST | Preview / run the LP **entry** saga (on-chain quoted) |
+| `/lp/positions` | GET | LP positions the session account holds (exitable) |
+| `/lp/withdraw/quote` · `/lp/withdraw/execute` | POST | Preview / run the LP **exit** saga (`remove_liquidity_cspr`) |
 
 ---
 
@@ -189,6 +222,8 @@ cp .env.example .env   # then fill in the values below
 | `OPENAI_MODEL` / `CLAUDE_MODEL` | – | Override the model (defaults: `gpt-4o-mini` / `claude-3-5-sonnet-latest`). |
 | `CASPER_SESSION_PRIVATE_KEY_HEX` / `_PEM` | – | Optional funded session key to enable **auto-signed** on-chain moves. Without it, every move needs Casper Wallet approval. |
 | `AGENT_API_BASE` | – | Base URL the MCP server uses to reach the app (default `http://localhost:3001`). |
+| `WCSPR_CONTRACT_PACKAGE_HASH` | – | WCSPR package hash for LP pricing/execution (testnet built in; set for mainnet). |
+| `CSPR_TRADE_ROUTER_PACKAGE_HASH` | – | CSPR.trade router package for LP execution (testnet built in; set for mainnet). |
 
 > The agent works read-only with just `CSPR_CLOUD_API_KEY`. Add an LLM key to enable the reasoning/veto layer, and a session key (or use Casper Wallet) to execute real transactions.
 
@@ -214,7 +249,9 @@ node --env-file=.env scripts/casper-discovery.mjs
 2. `.cursor/mcp.json` already registers two servers:
    - `casper-yield-router` — our stdio server (`node --env-file=.env mcp-server/server.mjs`)
    - `cspr_cloud_testnet` — the hosted CSPR.cloud MCP
-3. In your MCP client, call tools like `get_yield_snapshot`, `propose_rebalance`, then `execute_rebalance`.
+3. In your MCP client, call the tools:
+   - **Staking loop:** `get_yield_snapshot`, `get_wallet_state`, `get_agent_status`, `propose_rebalance`, `execute_rebalance`.
+   - **LP (CSPR.trade):** `get_lp_pools` (executable CSPR-paired pools), `quote_lp_deposit` (preview split/slippage/gas, read-only), `execute_lp_deposit` (runs the swap → approve → `add_liquidity_cspr` saga). So an LLM can discover, preview, and enter an LP position entirely through MCP.
 
 Smoke-test the MCP server directly:
 
@@ -231,12 +268,14 @@ node --env-file=.env mcp-server/test-client.mjs
 3. **Decide** proposes a move with reasoning; the LLM adds a verdict (and may veto).
 4. Small move → **auto-signed** and submitted. Large move → **Casper Wallet** approval.
 5. The execution appears in the timeline with a **cspr.live** explorer link, then flips to **confirmed**.
+6. **Provide liquidity · CSPR.trade** → pick a CSPR-paired pool, preview the split, and **Deposit** — the agent runs the swap → approve → `add_liquidity_cspr` saga, each step showing its own explorer link as it confirms, ending with LP tokens in the account.
 
 ---
 
 ## Roadmap
 
-- **LP pool reserves** — wire real pool TVL so DEX/LP APY becomes comparable and routable.
+- **LP execution routing** — ✅ done. Real CSPR.trade router integration for both **entry** (swap → approve → `add_liquidity_cspr`, proven on testnet) and **exit** (approve → `remove_liquidity_cspr`), with **on-chain quoting** (the router's `get_amounts_out` math applied to fresh reserves + total supply, reported as `reserveSource: live_onchain` with price impact). Next: multi-hop routing and automatic loop-driven LP↔staking rebalancing once held LP positions are tracked as first-class portfolio positions.
+- **Background autonomy** — ✅ done. Server-side scheduler runs the monitor → decide → execute loop unattended (no dashboard needed), started at boot via the Next.js instrumentation hook. Next: durable job queue / cron-backed persistence for multi-instance deployments.
 - **x402 / delegated authorization** — scoped, revocable auto-signing grants instead of a raw session key.
 - **Streaming** — CSPR.cloud WebSocket for push-based monitoring.
 

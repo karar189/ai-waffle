@@ -35,7 +35,8 @@ export type VenueKind = "staking" | "liquid_staking" | "lp";
 export type ApySource =
   | "derived_rewards"
   | "network_default"
-  | "volume_fee_apr";
+  | "volume_fee_apr"
+  | "reserves_tvl";
 
 export interface YieldSnapshot {
   /** Stable id for the venue (e.g. "staking:<validatorPublicKey>"). */
@@ -64,6 +65,26 @@ export interface YieldSnapshot {
   /** 0 (safest) .. 100 (riskiest). */
   riskScore: number;
   updatedAt: string;
+  /**
+   * LP-only pool composition needed to actually execute a deposit
+   * (swap → approve → add_liquidity_cspr). Present when the pool is CSPR-paired
+   * and its reserves were read on-chain.
+   */
+  lp?: LpPoolInfo;
+}
+
+/** Executable LP pool metadata (one side must be WCSPR). */
+export interface LpPoolInfo {
+  /** Pair contract package hash. */
+  pairPackageHash: string;
+  /** Non-WCSPR token contract package hash to swap into / deposit. */
+  tokenPackageHash: string;
+  tokenSymbol: string;
+  tokenDecimals: number;
+  /** WCSPR-side reserve, in motes. */
+  reserveCsprMotes: string;
+  /** Token-side reserve, in base units. */
+  reserveTokenBase: string;
 }
 
 export function motesToCspr(motes: string | number): number {

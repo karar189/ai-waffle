@@ -18,6 +18,7 @@ import {
   signAndSubmit,
 } from "@/lib/casper/deploy";
 import { getSessionKey, getSessionPublicKeyHex } from "@/lib/casper/keys";
+import { findLpSnapshot, executeLpDeposit, executeLpWithdraw } from "./lp";
 import {
   getState,
   addDecision,
@@ -89,6 +90,52 @@ export async function monitorAndDecide(
   return { decision, proposal };
 }
 
+export interface CycleResult {
+  decision: DecisionRecord;
+  proposal: RebalanceProposal | null;
+  execution: ExecutionRecord | null;
+  llmVetoed: boolean;
+  executeError?: string;
+}
+
+/**
+ * One full autonomous cycle: monitor -> decide -> (optionally) execute.
+ * Shared by the /monitor route and the server-side scheduler so both paths
+ * behave identically. Execution only happens when autoExecute is on, the
+ * proposal is auto-signable, the LLM didn't veto, and the agent is live.
+ */
+export async function runAgentCycle(opts: {
+  mode?: "dry_run" | "live";
+  autoExecute?: boolean;
+}): Promise<CycleResult> {
+  const mode = opts.mode ?? "live";
+  const { decision, proposal } = await monitorAndDecide(mode);
+  const llmVetoed = decision.llm?.verdict === "hold";
+
+  let execution: ExecutionRecord | null = null;
+  let executeError: string | undefined;
+
+  if (
+    opts.autoExecute &&
+    proposal &&
+    proposal.signingPath === "auto" &&
+    mode === "live" &&
+    !llmVetoed
+  ) {
+    const state = await getState();
+    if (state.running && !state.policy.paused && !state.policy.emergencyStop) {
+      try {
+        const result = await executeProposal(proposal, decision.id);
+        execution = result.execution;
+      } catch (e) {
+        executeError = e instanceof Error ? e.message : "execute failed";
+      }
+    }
+  }
+
+  return { decision, proposal, execution, llmVetoed, executeError };
+}
+
 async function resolveAccount(): Promise<string> {
   const state = await getState();
   if (state.connectedAccount) return state.connectedAccount;
@@ -115,6 +162,58 @@ export async function executeProposal(
   decisionId: string
 ): Promise<ExecuteResult> {
   const state = await getState();
+
+  // LP source: the agent is leaving a pool → run the exit saga (approve →
+  // remove_liquidity_cspr), returning CSPR to idle for the next cycle to route.
+  if (proposal.fromVenueId.startsWith("lp:")) {
+    const account = await getSessionPublicKeyHex();
+    if (!account) {
+      throw new Error(
+        "LP exit needs a session key (multi-tx saga); connect/fund one to route out of LP."
+      );
+    }
+    const snapshot = await findLpSnapshot(proposal.fromVenueId);
+    if (!snapshot?.lp) {
+      throw new Error(
+        `LP venue ${proposal.fromVenueId} is not CSPR-executable (needs a WCSPR-paired pool).`
+      );
+    }
+    return executeLpWithdraw({
+      account,
+      lp: snapshot.lp,
+      protocol: proposal.fromProtocol,
+      venueId: proposal.fromVenueId,
+      percent: 100,
+      decisionId,
+    });
+  }
+
+  // LP destinations go through the CSPR.trade router saga (multi-tx), which
+  // signs with the session key. Route there instead of the native path.
+  if (proposal.toVenueId.startsWith("lp:")) {
+    const account = await getSessionPublicKeyHex();
+    if (!account) {
+      throw new Error(
+        "LP execution needs a session key (multi-tx saga); connect/fund one to route into LP."
+      );
+    }
+    const snapshot = await findLpSnapshot(proposal.toVenueId);
+    if (!snapshot?.lp) {
+      throw new Error(
+        `LP venue ${proposal.toVenueId} is not CSPR-executable (needs a WCSPR-paired pool).`
+      );
+    }
+    return executeLpDeposit({
+      account,
+      lp: snapshot.lp,
+      protocol: proposal.toProtocol,
+      venueId: proposal.toVenueId,
+      amountCspr: proposal.amountCspr,
+      decisionId,
+      expectedAnnualGainCspr: proposal.expectedAnnualGainCspr,
+    });
+  }
+
   const account = await resolveAccount();
 
   const toValidator = validatorHexFromVenueId(proposal.toVenueId);

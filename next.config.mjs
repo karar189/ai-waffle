@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enables src/instrumentation.ts (Next 14) so the agent's background
+  // autonomy scheduler starts on server boot.
+  experimental: {
+    instrumentationHook: true,
+  },
   webpack: (config) => {
     // MetaMask only: we use wagmi's injected() connector. The wagmi/connectors barrel
     // loads every connector (Porto, Coinbase, WalletConnect, etc.); stub their optional

@@ -17,12 +17,12 @@ import {
 } from "./csprcloud";
 import {
   stakingSnapshotsFromValidators,
-  lpSnapshotsFromSwaps,
   deriveGrossStakingApy,
   DEFAULT_GROSS_STAKING_APY,
   type YieldSnapshot,
   type ApySource,
 } from "./normalize";
+import { lpSnapshotsWithReserves } from "./reserves";
 
 export interface SnapshotOptions {
   /** How many top validators to include as staking venues. */
@@ -114,7 +114,9 @@ export async function getYieldSnapshots(
         getDexes(signal),
         getSwaps({ pageSize: swapSampleSize, signal }),
       ]);
-      lp = lpSnapshotsFromSwaps(swaps.data, dexes, lpWindowDays, undefined, capturedAt);
+      lp = await lpSnapshotsWithReserves(swaps.data, dexes, lpWindowDays, {
+        signal,
+      });
     } catch {
       /* LP venues are best-effort; staking is the core set */
     }

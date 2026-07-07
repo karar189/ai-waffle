@@ -18,16 +18,21 @@ const DEFAULTS = {
   testnet: {
     rest: "https://api.testnet.cspr.cloud",
     stream: "wss://streaming.testnet.cspr.cloud",
-    nodeRpc: "https://node.testnet.cspr.cloud",
+    nodeRpc: "https://node.testnet.cspr.cloud/rpc",
     mcp: "https://mcp.testnet.cspr.cloud/mcp",
     explorer: "https://testnet.cspr.live",
+    // Wrapped CSPR (WCSPR) contract package — the CSPR-denominated quote token
+    // used to price LP reserves. Override via WCSPR_CONTRACT_PACKAGE_HASH.
+    wcspr: "3d80df21ba4ee4d66a2a1f60c32570dd5685e4b279f6538162a5fd1314847c1e",
   },
   mainnet: {
     rest: "https://api.cspr.cloud",
     stream: "wss://streaming.cspr.cloud",
-    nodeRpc: "https://node.cspr.cloud",
+    nodeRpc: "https://node.cspr.cloud/rpc",
     mcp: "https://mcp.cspr.cloud/mcp",
     explorer: "https://cspr.live",
+    // Set the mainnet WCSPR package hash via WCSPR_CONTRACT_PACKAGE_HASH.
+    wcspr: "",
   },
 } as const;
 
@@ -42,6 +47,24 @@ export const CSPR_CLOUD = {
   x402FacilitatorUrl:
     process.env.CSPR_X402_FACILITATOR_URL ?? "https://x402-facilitator.cspr.cloud",
   explorerUrl: d.explorer,
+  /** WCSPR contract package hash used to price LP reserves in CSPR. */
+  wcsprPackageHash: process.env.WCSPR_CONTRACT_PACKAGE_HASH ?? d.wcspr,
+} as const;
+
+/**
+ * CSPR.trade (Uniswap-V2-style DEX) router config used for LP execution.
+ *
+ * Sending native CSPR into the router requires a `proxy_caller` session WASM
+ * that funds a purse and forwards the call. The router package hash is the same
+ * on testnet as used across the CSPR.trade reference implementations.
+ */
+export const CSPR_TRADE = {
+  /** Router contract package hash (StoredVersionedContractByHash target). */
+  routerPackageHash:
+    process.env.CSPR_TRADE_ROUTER_PACKAGE_HASH ??
+    "04a11a367e708c52557930c4e9c1301f4465100d1b1b6d0a62b48d3e32402867",
+  /** WCSPR package hash — always the first hop of a CSPR swap path. */
+  wcsprPackageHash: process.env.WCSPR_CONTRACT_PACKAGE_HASH ?? d.wcspr,
 } as const;
 
 /** Read the CSPR.cloud token, throwing a clear error when it is missing. */

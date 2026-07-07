@@ -37,5 +37,33 @@ const prop = await client.callTool({
 const propText = prop.content?.[0]?.text ?? "";
 console.log("\npropose_rebalance ->", propText.slice(0, 500));
 
+// LP tools (read-only): list executable pools, then quote a deposit on the first.
+const lp = await client.callTool({ name: "get_lp_pools", arguments: {} });
+const lpText = lp.content?.[0]?.text ?? "{}";
+console.log("\nget_lp_pools ->", lpText.slice(0, 400));
+
+const firstVenue = JSON.parse(lpText)?.pools?.[0]?.venueId;
+if (firstVenue) {
+  const q = await client.callTool({
+    name: "quote_lp_deposit",
+    arguments: { venueId: firstVenue, amountCspr: 10 },
+  });
+  console.log("\nquote_lp_deposit ->", (q.content?.[0]?.text ?? "").slice(0, 500));
+}
+
+// LP exit tools (read-only): list held positions, then quote a withdraw if any.
+const pos = await client.callTool({ name: "get_lp_positions", arguments: {} });
+const posText = pos.content?.[0]?.text ?? "{}";
+console.log("\nget_lp_positions ->", posText.slice(0, 400));
+
+const heldVenue = JSON.parse(posText)?.positions?.[0]?.venueId;
+if (heldVenue) {
+  const wq = await client.callTool({
+    name: "quote_lp_withdraw",
+    arguments: { venueId: heldVenue, percent: 100 },
+  });
+  console.log("\nquote_lp_withdraw ->", (wq.content?.[0]?.text ?? "").slice(0, 500));
+}
+
 await client.close();
 process.exit(0);

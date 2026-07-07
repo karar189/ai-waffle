@@ -5,6 +5,8 @@ import {
   setEmergencyStop,
   setPositions,
   setConnectedAccount,
+  setAutoExecute,
+  setAutonomyInterval,
   getState,
 } from "@/lib/agent/store";
 import { getAccountPositions } from "@/lib/casper/positions";
@@ -31,12 +33,18 @@ export async function POST(req: NextRequest) {
       emergencyStop?: boolean;
       positions?: Position[];
       connectedAccount?: string | null;
+      autoExecute?: boolean;
+      autonomyIntervalSec?: number;
     };
 
     if (body.policy) await updatePolicy(body.policy);
     if (typeof body.emergencyStop === "boolean")
       await setEmergencyStop(body.emergencyStop);
     if (typeof body.running === "boolean") await setRunning(body.running);
+    if (typeof body.autoExecute === "boolean")
+      await setAutoExecute(body.autoExecute);
+    if (typeof body.autonomyIntervalSec === "number")
+      await setAutonomyInterval(body.autonomyIntervalSec);
     if (body.positions) await setPositions(body.positions);
     if (body.connectedAccount !== undefined) {
       await setConnectedAccount(body.connectedAccount ?? undefined);
@@ -57,6 +65,8 @@ export async function POST(req: NextRequest) {
       policy: state.policy,
       positions: state.positions,
       connectedAccount: state.connectedAccount ?? null,
+      autoExecute: state.autoExecute,
+      autonomyIntervalSec: state.autonomyIntervalSec,
     });
   } catch (e) {
     return NextResponse.json(

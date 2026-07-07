@@ -48,6 +48,15 @@ export type ExecutionStatus =
   | "failed"
   | "rejected";
 
+/** One on-chain step within a multi-tx saga (LP deposits). */
+export interface ExecutionStep {
+  label: string;
+  entryPoint: string;
+  status: ExecutionStatus;
+  deployHash?: string;
+  error?: string;
+}
+
 export interface ExecutionRecord {
   id: string;
   decisionId: string;
@@ -64,6 +73,17 @@ export interface ExecutionRecord {
   error?: string;
   beforeAllocation: Position[];
   afterAllocation?: Position[];
+  /**
+   * "staking" (native, single tx), "lp" (CSPR.trade deposit saga), or
+   * "lp_exit" (CSPR.trade withdraw saga: approve → remove_liquidity_cspr).
+   */
+  kind?: "staking" | "lp" | "lp_exit";
+  /** Ordered saga steps (LP deposits: swap → approve → add_liquidity). */
+  steps?: ExecutionStep[];
+  /** LP token contract package hash received (LP deposits). */
+  lpTokenPackageHash?: string;
+  /** LP token balance received (base units). */
+  lpTokensReceived?: string;
 }
 
 export interface AgentState {
@@ -74,6 +94,10 @@ export interface AgentState {
   lastMoveAt: number | null;
   decisions: DecisionRecord[];
   executions: ExecutionRecord[];
+  /** When true, the background scheduler executes (not just decides) each tick. */
+  autoExecute: boolean;
+  /** Seconds between autonomous background cycles. */
+  autonomyIntervalSec: number;
 }
 
 const DATA_DIR = path.join(process.cwd(), ".agent-data");
@@ -95,23 +119,43 @@ function freshState(): AgentState {
     lastMoveAt: null,
     decisions: [],
     executions: [],
+    autoExecute: false,
+    autonomyIntervalSec: 60,
   };
 }
 
 // Module-level singleton (persists across requests in a running dev server).
+//
+// IMPORTANT: the API routes and the background scheduler (started from
+// instrumentation.ts) are compiled into SEPARATE bundles, so this module is
+// instantiated more than once — each with its own `state`. The JSON file is the
+// shared source of truth: `load()` re-reads it whenever it changed on disk
+// (mtime-based) so cross-instance writes (e.g. the dashboard toggling `running`,
+// the scheduler appending executions) are visible everywhere.
 let state: AgentState | null = null;
-let loaded = false;
+let lastLoadedMtimeMs = 0;
+
+async function readFileState(): Promise<AgentState | null> {
+  try {
+    const raw = await fs.readFile(STATE_FILE, "utf8");
+    return { ...freshState(), ...(JSON.parse(raw) as Partial<AgentState>) };
+  } catch {
+    return null;
+  }
+}
 
 async function load(): Promise<AgentState> {
-  if (state) return state;
-  if (!loaded) {
-    loaded = true;
-    try {
-      const raw = await fs.readFile(STATE_FILE, "utf8");
-      state = { ...freshState(), ...(JSON.parse(raw) as Partial<AgentState>) };
-    } catch {
-      state = freshState();
+  try {
+    const st = await fs.stat(STATE_FILE);
+    if (!state || st.mtimeMs > lastLoadedMtimeMs) {
+      const fresh = await readFileState();
+      if (fresh) {
+        state = fresh;
+        lastLoadedMtimeMs = st.mtimeMs;
+      }
     }
+  } catch {
+    // File doesn't exist yet — fall through to in-memory / fresh state.
   }
   return state ?? (state = freshState());
 }
@@ -121,6 +165,9 @@ async function persist(): Promise<void> {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
     await fs.writeFile(STATE_FILE, JSON.stringify(state, null, 2), "utf8");
+    // Mark our own write as seen so we don't needlessly re-read it back.
+    const st = await fs.stat(STATE_FILE);
+    lastLoadedMtimeMs = st.mtimeMs;
   } catch {
     /* best-effort */
   }
@@ -152,6 +199,18 @@ export async function setConnectedAccount(account?: string): Promise<void> {
 export async function setRunning(running: boolean): Promise<void> {
   const s = await load();
   s.running = running;
+  await persist();
+}
+
+export async function setAutoExecute(autoExecute: boolean): Promise<void> {
+  const s = await load();
+  s.autoExecute = autoExecute;
+  await persist();
+}
+
+export async function setAutonomyInterval(sec: number): Promise<void> {
+  const s = await load();
+  s.autonomyIntervalSec = Math.max(15, Math.round(sec));
   await persist();
 }
 
