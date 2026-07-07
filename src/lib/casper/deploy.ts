@@ -144,14 +144,16 @@ export async function submitWithSignature(
 export async function submitSigned(tx: Transaction): Promise<SubmitResult> {
   const client = getRpcClient();
   const res = await client.putTransaction(tx);
+  const response = res as {
+    transactionHash?: { toHex?: () => string } | string;
+    deployHash?: string;
+  };
   // The SDK returns a transaction hash object; normalize to hex.
   const hash =
-    // @ts-expect-error - SDK response shape varies across builds
-    res?.transactionHash?.toHex?.() ??
-    // @ts-expect-error - fallback field
-    res?.transactionHash ??
-    // @ts-expect-error - deploy-style fallback
-    res?.deployHash ??
+    (typeof response.transactionHash === "object"
+      ? response.transactionHash.toHex?.()
+      : response.transactionHash) ??
+    response.deployHash ??
     "";
   return { transactionHash: String(hash) };
 }

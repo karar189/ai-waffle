@@ -196,7 +196,7 @@ export function FetchMLSignalModals({
                   <Button
                     onClick={onFetchSignal}
                     disabled={loadingFetch}
-                    variant="secondary"
+                    variant="subtle"
                     className="flex-1 gap-2"
                   >
                     {loadingFetch && <Loader2 className="size-4 animate-spin" />}

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/router';
 
 export default function AuthModal({ isOpen, onClose }) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -16,13 +16,13 @@ export default function AuthModal({ isOpen, onClose }) {
     setTimeout(() => {
       setIsSubmitting(false);
       onClose();
-      navigate('/dashboard');
+      router.push('/dashboard');
     }, 400);
   };
 
   const handleDemoUser = () => {
     onClose();
-    navigate('/dashboard');
+    router.push('/dashboard');
   };
 
   return (

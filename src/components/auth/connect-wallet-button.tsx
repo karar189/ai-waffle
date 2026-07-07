@@ -9,7 +9,7 @@ import { cn } from "@/utils";
 interface ConnectWalletButtonProps {
   onSuccess?: () => void;
   className?: string;
-  variant?: "default" | "outline" | "ghost" | "link" | "destructive" | "secondary";
+  variant?: "primary" | "outline" | "ghost" | "subtle" | "destructive" | "purple";
 }
 
 export function ConnectWalletButton({ onSuccess, className, variant = "outline" }: ConnectWalletButtonProps) {
@@ -36,7 +36,7 @@ export function ConnectWalletButton({ onSuccess, className, variant = "outline" 
     return (
       <Button
         type="button"
-        variant="secondary"
+        variant="subtle"
         size="sm"
         className={className}
         onClick={() => disconnect()}

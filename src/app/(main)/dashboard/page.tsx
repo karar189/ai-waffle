@@ -50,10 +50,10 @@ export default function DashboardPage() {
             Autonomous · Casper testnet
           </div>
           <h1 className="text-3xl md:text-4xl font-medium tracking-tight text-black" style={{ letterSpacing: "-0.03em" }}>
-            Yield overview
+            Waffle Trade overview
           </h1>
           <p className="mt-1.5 text-sm text-black/60 max-w-lg">
-            Autonomous yield-routing across Casper DeFi protocols, orchestrated over MCP.
+            Waffle Trade routes yield across Casper DeFi protocols, orchestrated over MCP.
           </p>
         </div>
         <Link

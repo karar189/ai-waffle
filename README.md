@@ -1,4 +1,4 @@
-# Casper Yield Router
+# Waffle Trade
 
 **An autonomous, MCP-native yield-routing agent for the Casper blockchain.**
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   NavigationMenu,
@@ -33,7 +33,7 @@ export default function Navbar({ onTryDemo, onLogin }) {
       <MaxWidthWrapper>
         <div className="flex h-14 sm:h-16 items-center justify-between gap-6">
           <Link
-            to="/"
+            href="/"
             className="text-lg font-semibold text-white hover:text-primary transition-colors shrink-0"
           >
             Trading Copilot

@@ -1,321 +1,530 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { motion } from "framer-motion";
+import {
+    Activity,
+    ArrowRight,
+    Bot,
+    CheckCircle2,
+    Coins,
+    GitBranch,
+    LockKeyhole,
+    Network,
+    PauseCircle,
+    ShieldCheck,
+    Sparkles,
+    Zap,
+} from "lucide-react";
 import { LogoIcon } from "@/components/halo/logo-icon";
 
-const NAV_LINKS: { label: string; href: string }[] = [
-    { label: "Pricing", href: "/pricing" },
-    { label: "Enterprise", href: "/enterprise" },
-    { label: "Changelog", href: "/changelog" },
-    { label: "Help", href: "/resources/help" },
-    { label: "News", href: "/resources/blog" },
+const NAV_LINKS = [
+    { label: "Product", href: "#product" },
+    { label: "Autonomy", href: "#autonomy" },
+    { label: "Safety", href: "#safety" },
+    { label: "MCP", href: "#mcp" },
 ];
 
-const HERO_BRANDS: { name: string; style: React.CSSProperties }[] = [
-    { name: "Stripe", style: { fontFamily: "Georgia, serif", fontWeight: 700, letterSpacing: "-0.02em", fontSize: "15px" } },
-    { name: "Coinbase", style: { fontFamily: "Arial, sans-serif", fontWeight: 900, letterSpacing: "0.08em", fontSize: "13px", textTransform: "uppercase" } },
-    { name: "Uniswap", style: { fontFamily: "'Trebuchet MS', sans-serif", fontWeight: 600, letterSpacing: "0.01em", fontSize: "15px", fontStyle: "italic" } },
-    { name: "Aave", style: { fontFamily: "'Courier New', monospace", fontWeight: 700, letterSpacing: "0.12em", fontSize: "13px", textTransform: "uppercase" } },
-    { name: "Compound", style: { fontFamily: "Palatino, 'Book Antiqua', serif", fontWeight: 400, letterSpacing: "-0.01em", fontSize: "16px" } },
-    { name: "MakerDAO", style: { fontFamily: "Impact, 'Arial Narrow', sans-serif", fontWeight: 400, letterSpacing: "0.04em", fontSize: "14px" } },
-    { name: "Chainlink", style: { fontFamily: "Verdana, sans-serif", fontWeight: 700, letterSpacing: "-0.03em", fontSize: "13px" } },
+const PROOF_STRIP = [
+    "CSPR.cloud",
+    "Casper Testnet",
+    "CSPR.trade LP",
+    "MCP Server",
+    "LLM Veto",
+    "Session Key",
+    "Guardrails",
 ];
 
-const BACKERS: { name: string; style: React.CSSProperties }[] = [
-    { name: "Fundamental Labs", style: { fontFamily: "'Times New Roman', serif", fontWeight: 400, letterSpacing: "0.02em", fontSize: "14px" } },
-    { name: "KUCOIN", style: { fontFamily: "'Arial Black', sans-serif", fontWeight: 900, letterSpacing: "0.08em", fontSize: "16px" } },
-    { name: "NGC", style: { fontFamily: "Impact, sans-serif", fontWeight: 700, letterSpacing: "0.05em", fontSize: "18px" } },
-    { name: "NxGen", style: { fontFamily: "Georgia, serif", fontWeight: 600, letterSpacing: "-0.02em", fontSize: "17px" } },
-    { name: "Matter Labs", style: { fontFamily: "Helvetica, sans-serif", fontWeight: 700, letterSpacing: "-0.01em", fontSize: "15px" } },
-    { name: "DEXTools", style: { fontFamily: "Verdana, sans-serif", fontWeight: 700, letterSpacing: "0.06em", fontSize: "14px", textTransform: "uppercase" } },
-    { name: "NGRAVE", style: { fontFamily: "'Courier New', monospace", fontWeight: 700, letterSpacing: "0.18em", fontSize: "14px" } },
-    { name: "Polychain", style: { fontFamily: "Palatino, serif", fontWeight: 500, letterSpacing: "0.03em", fontSize: "15px" } },
+const PIPELINE = [
+    {
+        icon: Activity,
+        title: "Monitor",
+        text: "Live Casper reads for validators, rewards, swaps, reserves, wallet balances, and delegations.",
+    },
+    {
+        icon: GitBranch,
+        title: "Decide",
+        text: "Risk-adjusted ranking compares staking and CSPR-paired LP venues against your policy.",
+    },
+    {
+        icon: Bot,
+        title: "Review",
+        text: "OpenAI or Claude gets a structured verdict layer and can veto an otherwise valid move.",
+    },
+    {
+        icon: Zap,
+        title: "Rebalance",
+        text: "Small moves auto-sign with a session key; larger moves route through Casper Wallet approval.",
+    },
 ];
+
+const SAFETY = [
+    {
+        icon: ShieldCheck,
+        title: "Policy guardrails",
+        text: "Max move size, venue caps, cooldown, minimum liquidity, and allowed venue kinds are checked before execution.",
+    },
+    {
+        icon: LockKeyhole,
+        title: "Hybrid signing",
+        text: "The agent can automate small testnet moves while still requiring a human signature for bigger changes.",
+    },
+    {
+        icon: PauseCircle,
+        title: "Stop controls",
+        text: "Pause and emergency stop controls halt proposals and execution, including the server-side scheduler.",
+    },
+];
+
+const MCP_TOOLS = [
+    "get_yield_snapshot",
+    "get_wallet_state",
+    "propose_rebalance",
+    "execute_rebalance",
+    "quote_lp_deposit",
+    "execute_lp_withdraw",
+];
+
+const fadeUp = {
+    hidden: { opacity: 0, y: 24 },
+    show: {
+        opacity: 1,
+        y: 0,
+        transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
+    },
+};
+
+const softScale = {
+    hidden: { opacity: 0, scale: 0.985 },
+    show: {
+        opacity: 1,
+        scale: 1,
+        transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] },
+    },
+};
+
+const stagger = {
+    hidden: {},
+    show: {
+        transition: { staggerChildren: 0.09, delayChildren: 0.12 },
+    },
+};
 
 const Navbar = () => (
-    <nav className="absolute top-0 left-0 right-0 z-20 px-6 py-5">
-        <div className="max-w-[88rem] mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-2">
-                <LogoIcon className="w-7 h-7 text-black" />
-                <span className="text-2xl font-medium tracking-tight text-black">Halo</span>
-            </div>
-            <div className="hidden md:flex items-center gap-8">
+    <motion.nav
+        className="absolute left-0 right-0 top-0 z-20 px-6 py-5"
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+    >
+        <div className="mx-auto flex max-w-[88rem] items-center justify-between">
+            <Link href="/" className="flex items-center gap-2">
+                <LogoIcon className="h-7 w-7 text-black" />
+                <span className="text-2xl font-medium tracking-tight text-black">Waffle Trade</span>
+            </Link>
+
+            <div className="hidden items-center gap-8 md:flex">
                 {NAV_LINKS.map((link) => (
                     <Link
                         key={link.href}
                         href={link.href}
-                        className="text-base text-gray-700 hover:text-black font-medium transition-colors duration-200"
+                        className="text-base font-medium text-black/60 transition-colors hover:text-black"
                     >
                         {link.label}
                     </Link>
                 ))}
             </div>
+
             <Link
-                href="/dashboard"
-                className="bg-black text-white text-base font-medium px-7 py-2.5 rounded-full hover:bg-gray-800 transition-colors duration-200"
+                href="/dashboard/agent"
+                className="rounded-full bg-black px-7 py-2.5 text-base font-medium text-white transition-colors hover:bg-black/82"
             >
                 Launch
             </Link>
         </div>
-    </nav>
+    </motion.nav>
 );
 
-const BrandMarquee = () => (
-    <div className="mt-24 w-full max-w-md overflow-hidden">
+const ProofMarquee = () => (
+    <div className="mt-16 w-full max-w-xl overflow-hidden">
         <style>{`
-            @keyframes marquee {
+            @keyframes proof-marquee {
                 0% { transform: translateX(0); }
                 100% { transform: translateX(-50%); }
             }
-            .marquee-track {
+            .proof-track {
                 display: flex;
                 width: max-content;
-                animation: marquee 22s linear infinite;
+                animation: proof-marquee 24s linear infinite;
             }
         `}</style>
-        <div className="marquee-track">
-            {[...HERO_BRANDS, ...HERO_BRANDS].map((brand, i) => (
+        <div className="proof-track">
+            {[...PROOF_STRIP, ...PROOF_STRIP].map((item, i) => (
                 <span
-                    key={`${brand.name}-${i}`}
-                    className="mx-7 shrink-0 text-black/60 whitespace-nowrap"
-                    style={brand.style}
+                    key={`${item}-${i}`}
+                    className="mx-7 shrink-0 whitespace-nowrap text-sm font-semibold uppercase tracking-[0.12em] text-black/45"
                 >
-                    {brand.name}
+                    {item}
                 </span>
             ))}
         </div>
     </div>
 );
 
+const ArrowPill = ({ label, href, light = false }: { label: string; href: string; light?: boolean }) => (
+    <Link
+        href={href}
+        className={[
+            "inline-flex items-center gap-3 rounded-full py-2 pl-8 pr-2 text-base font-medium transition-colors",
+            light ? "bg-white text-black hover:bg-white/88" : "bg-black text-white hover:bg-black/82",
+        ].join(" ")}
+    >
+        {label}
+        <span className={["rounded-full p-2", light ? "bg-black" : "bg-white"].join(" ")}>
+            <ArrowRight className={["h-5 w-5", light ? "text-white" : "text-black"].join(" ")} />
+        </span>
+    </Link>
+);
+
 const HeroSection = () => (
-    <section className="flex-1 px-6 pt-20 pb-6 flex items-end">
-        <div
-            className="relative w-full rounded-2xl overflow-hidden"
-            style={{ height: "calc(100vh - 96px)" }}
+    <section className="flex min-h-screen flex-col bg-[#F7F2FF] px-6 pb-6 pt-20">
+        <motion.div
+            className="relative flex flex-1 overflow-hidden rounded-2xl bg-[#E9DDFB]"
+            variants={softScale}
+            initial="hidden"
+            animate="show"
         >
             <video
                 autoPlay
                 muted
                 loop
                 playsInline
-                className="object-cover absolute inset-0 w-full h-full"
+                className="absolute inset-0 h-full w-full object-cover opacity-70"
             >
                 <source
                     src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260423_161253_c72b1869-400f-45ed-ac0c-52f68c2ed5bd.mp4"
                     type="video/mp4"
                 />
             </video>
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(247,242,255,0.94),rgba(247,242,255,0.66)_46%,rgba(247,242,255,0.22))]" />
 
-            <div className="relative z-10 flex flex-col items-start justify-start h-full p-12 pt-36">
-                <h1
-                    className="text-black text-5xl md:text-6xl font-medium leading-tight max-w-xl mb-4"
-                    style={{ letterSpacing: "-0.04em" }}
-                >
-                    Your Wealth
-                    <br />
-                    Works
-                </h1>
-                <p
-                    className="text-black/70 text-base md:text-lg max-w-md mb-8 leading-relaxed"
-                    style={{ fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}
-                >
-                    An automated, reward-powered digital dollar built for native passive earnings and effortless connection into DeFi.
-                </p>
-                <Link
-                    href="/auth/sign-up"
-                    className="inline-flex items-center gap-3 bg-black text-white text-base md:text-lg font-medium pl-8 pr-2 py-2 rounded-full hover:bg-gray-800 transition-colors duration-200"
-                >
-                    Join us
-                    <span className="bg-white rounded-full p-2 hover:bg-white transition-colors duration-200">
-                        <ArrowRight className="w-5 h-5 text-black" />
-                    </span>
-                </Link>
-
-                <BrandMarquee />
-            </div>
-        </div>
-    </section>
-);
-
-const ArrowPill = ({ label, href }: { label: string; href: string }) => (
-    <Link
-        href={href}
-        className="inline-flex items-center gap-3 bg-black text-white text-base font-medium pl-8 pr-2 py-2 rounded-full hover:bg-gray-800 transition-colors duration-200"
-    >
-        {label}
-        <span className="bg-white rounded-full p-2 hover:bg-white transition-colors duration-200">
-            <ArrowRight className="w-5 h-5 text-black" />
-        </span>
-    </Link>
-);
-
-const InfoSection = () => (
-    <section className="bg-[#F5F5F5] px-6 py-24">
-        <div className="max-w-[88rem] mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-16 items-start">
-                <div>
-                    <h2
-                        className="text-black text-4xl md:text-5xl font-medium leading-tight mb-8"
-                        style={{ letterSpacing: "-0.03em" }}
+            <div className="relative z-10 flex h-full w-full flex-col justify-between p-8 pt-28 md:p-12 md:pt-36">
+                <motion.div variants={stagger} initial="hidden" animate="show">
+                    <motion.div
+                        variants={fadeUp}
+                        className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-medium text-black/65 backdrop-blur"
                     >
-                        Meet USD Halo.
-                    </h2>
-                    <ArrowPill label="Discover it" href="/pricing" />
-                </div>
-                <p className="text-black/70 text-2xl md:text-3xl leading-relaxed">
-                    USD Halo is a reward-earning dollar coin that lets your savings grow while remaining tied to the U.S. dollar.
-                </p>
-            </div>
+                        <Network className="h-4 w-4 text-[#7C3AED]" />
+                        Autonomous yield routing by Waffle Trade
+                    </motion.div>
+                    <motion.h1 variants={fadeUp} className="max-w-3xl text-5xl font-medium leading-tight text-black md:text-7xl">
+                        Waffle Trade,
+                        <br />
+                        on autopilot.
+                    </motion.h1>
+                    <motion.p variants={fadeUp} className="mt-5 max-w-lg text-base leading-relaxed text-black/68 md:text-lg">
+                        A self-driving protocol that monitors live Casper yields, proposes safer reallocations,
+                        and executes staking or CSPR.trade LP moves with guardrails, LLM review, and MCP control.
+                    </motion.p>
+                    <motion.div variants={fadeUp} className="mt-8 flex flex-col gap-3 sm:flex-row">
+                        <ArrowPill label="Open agent" href="/dashboard/agent" />
+                        <Link
+                            href="#product"
+                            className="inline-flex items-center justify-center rounded-full bg-white/72 px-7 py-3 font-medium text-black backdrop-blur transition hover:bg-white"
+                        >
+                            See the loop
+                        </Link>
+                    </motion.div>
+                    <motion.div variants={fadeUp}>
+                        <ProofMarquee />
+                    </motion.div>
+                </motion.div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div
-                    className="rounded-2xl lg:col-span-2"
-                    style={{
-                        backgroundImage:
-                            "url('https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260423_164207_f243351d-ed59-48ec-83a0-a5e996bdbe3c.png&w=1280&q=85')",
-                        backgroundSize: "cover",
-                        backgroundPosition: "center",
-                    }}
+                <motion.div
+                    className="mt-12 grid max-w-3xl grid-cols-2 gap-3 md:grid-cols-4"
+                    variants={stagger}
+                    initial="hidden"
+                    animate="show"
                 >
-                    <div className="p-7 min-h-80 flex flex-col justify-between">
-                        <h3
-                            className="text-black text-2xl font-medium leading-snug"
-                            style={{ letterSpacing: "-0.02em" }}
-                        >
-                            Savings that bloom
-                        </h3>
-                        <p className="text-black/70 text-base max-w-xs">
-                            Gain steady returns as your dollar tokens are routed into top-performing DeFi strategies.
-                        </p>
-                    </div>
-                </div>
-
-                <div className="rounded-2xl bg-[#2B2644] p-7 min-h-80 flex flex-col justify-between">
-                    <h3 className="text-white text-2xl font-medium leading-snug">
-                        Always fluid,
-                        <br />
-                        always pegged.
-                    </h3>
-                    <p className="text-white/60 text-base">
-                        Keep fully dollar-anchored with on-demand access to funds — no lockups or waits.
-                    </p>
-                </div>
-
-                <div className="rounded-2xl bg-[#2B2644] p-7 min-h-80 flex flex-col justify-between">
-                    <h3 className="text-white text-2xl font-medium leading-snug">
-                        Fully
-                        <br />
-                        automated
-                    </h3>
-                    <p className="text-white/60 text-base">
-                        Skip the task of tuning positions yourself. USD Halo runs in the background for you.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-);
-
-const BackedBySection = () => (
-    <section className="bg-[#F5F5F5] px-6">
-        <div className="max-w-[88rem] mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 items-center">
-            <p className="text-black/70 text-base leading-relaxed">
-                Funded by premier partners
-                <br />
-                and forward-thinking leaders.
-            </p>
-            <div className="md:col-span-3 overflow-hidden">
-                <style>{`
-                    @keyframes backers-marquee {
-                        0% { transform: translateX(0); }
-                        100% { transform: translateX(-50%); }
-                    }
-                    .backers-track {
-                        display: flex;
-                        width: max-content;
-                        animation: backers-marquee 30s linear infinite;
-                    }
-                `}</style>
-                <div className="backers-track">
-                    {[...BACKERS, ...BACKERS].map((brand, i) => (
-                        <span
-                            key={`${brand.name}-${i}`}
-                            className="mx-10 shrink-0 text-black/50 whitespace-nowrap"
-                            style={brand.style}
-                        >
-                            {brand.name}
-                        </span>
+                    {[
+                        ["Live", "CSPR.cloud reads"],
+                        ["11", "MCP tools"],
+                        ["24/7", "scheduler loop"],
+                        ["LP", "enter and exit"],
+                    ].map(([value, label]) => (
+                        <motion.div key={label} variants={fadeUp} className="rounded-lg bg-white/68 p-4 backdrop-blur">
+                            <p className="text-2xl font-semibold text-black">{value}</p>
+                            <p className="mt-1 text-sm text-black/52">{label}</p>
+                        </motion.div>
                     ))}
-                </div>
+                </motion.div>
             </div>
-        </div>
+        </motion.div>
     </section>
 );
 
-const UseCasesSection = () => (
-    <section className="bg-[#F5F5F5] px-6 py-24">
-        <div className="max-w-[88rem] mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-            <div className="md:pr-12 md:pt-2">
-                <p className="text-black/60 text-sm mb-2">USD Halo in Practice</p>
-                <h2
-                    className="text-black text-5xl md:text-6xl font-medium leading-none mb-6"
-                    style={{ letterSpacing: "-0.04em" }}
-                >
-                    Use modes
-                </h2>
-                <p className="text-black/60 text-base leading-relaxed max-w-sm">
-                    USD Halo powers a wide range of modes for builders, companies and treasuries wanting safe and rewarding stablecoin integrations plus more
+const ProductSection = () => (
+    <motion.section
+        id="product"
+        className="scroll-mt-10 bg-[#F7F2FF] px-6 py-24 text-black"
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, amount: 0.2 }}
+        variants={stagger}
+    >
+        <div className="mx-auto max-w-[88rem]">
+            <motion.div variants={fadeUp} className="mb-16 grid grid-cols-1 items-start gap-12 md:grid-cols-2">
+                <div>
+                    <p className="mb-2 text-sm font-medium uppercase tracking-[0.14em] text-black/45">
+                        Product loop
+                    </p>
+                    <h2 className="text-4xl font-medium leading-tight md:text-5xl">
+                        Meet Waffle Trade, the agent that actually does the work.
+                    </h2>
+                </div>
+                <p className="text-2xl leading-relaxed text-black/68 md:text-3xl">
+                    It is not just a dashboard. It is a monitor, decision engine, signing workflow,
+                    execution trail, and MCP surface in one product.
                 </p>
-            </div>
+            </motion.div>
 
-            <div className="group relative rounded-3xl overflow-hidden min-h-[720px]">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {PIPELINE.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                        <motion.article key={item.title} variants={fadeUp} className="min-h-80 rounded-lg bg-white p-7 shadow-sm">
+                            <Icon className="h-9 w-9 text-[#7C3AED]" />
+                            <h3 className="mt-10 text-2xl font-medium leading-snug">{item.title}</h3>
+                            <p className="mt-4 text-base leading-relaxed text-black/58">{item.text}</p>
+                        </motion.article>
+                    );
+                })}
+            </div>
+        </div>
+    </motion.section>
+);
+
+const AutonomySection = () => (
+    <motion.section
+        id="autonomy"
+        className="scroll-mt-10 bg-[#F7F2FF] px-6 pb-24 text-black"
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, amount: 0.2 }}
+        variants={stagger}
+    >
+        <div className="mx-auto grid max-w-[88rem] grid-cols-1 items-start gap-8 md:grid-cols-2">
+            <motion.div variants={fadeUp} className="md:pr-12 md:pt-2">
+                <p className="mb-2 text-sm font-medium uppercase tracking-[0.14em] text-black/45">
+                    Server-side autonomy
+                </p>
+                <h2 className="mb-6 text-5xl font-medium leading-none md:text-6xl">
+                    Runs even when the page is closed.
+                </h2>
+                <p className="max-w-md text-base leading-relaxed text-black/60">
+                    The scheduler starts on server boot, shares state with the dashboard, and runs monitor to decide
+                    to execute cycles only when the agent is enabled.
+                </p>
+            </motion.div>
+
+            <motion.div variants={softScale} className="group relative min-h-[680px] overflow-hidden rounded-2xl bg-[#3B1B5C]">
                 <video
                     autoPlay
                     muted
                     loop
                     playsInline
-                    className="object-cover absolute inset-0 w-full h-full"
+                    className="absolute inset-0 h-full w-full object-cover opacity-48"
                 >
                     <source
                         src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260423_183428_ab5e672a-f608-4dcb-b319-f3e040f02e2d.mp4"
                         type="video/mp4"
                     />
                 </video>
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(247,242,255,0.66),rgba(247,242,255,0.24)_55%,rgba(48,21,78,0.56))]" />
 
-                <div className="relative z-10 p-10 md:p-12">
-                    <h3
-                        className="text-black text-4xl md:text-5xl font-medium leading-tight mb-5"
-                        style={{ letterSpacing: "-0.03em" }}
-                    >
-                        Commerce
-                    </h3>
-                    <p className="text-black/70 text-base max-w-md mb-8">
-                        Lift customer retention by offering USD Halo, a trusted dollar-backed stablecoin with strong yields, letting your patrons earn with zero effort on your platform.
+                <div className="relative z-10 flex min-h-[680px] flex-col justify-between p-8 md:p-12">
+                    <div>
+                        <h3 className="text-4xl font-medium leading-tight text-black md:text-5xl">
+                            Agent control room
+                        </h3>
+                        <p className="mt-5 max-w-md text-base leading-relaxed text-black/70">
+                            Live status, proposals, AI verdict, LP tooling, policy sliders, and execution history all stay in sync.
+                        </p>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {[
+                            "Autonomous scheduler",
+                            "CSPR.trade LP sagas",
+                            "Execution proof links",
+                            "Live on-chain quotes",
+                        ].map((item) => (
+                            <div key={item} className="flex items-center gap-3 rounded-lg bg-white/12 p-4 text-white backdrop-blur">
+                                <CheckCircle2 className="h-5 w-5 shrink-0 text-[#E9D5FF]" />
+                                <span>{item}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    </motion.section>
+);
+
+const SafetySection = () => (
+    <motion.section
+        id="safety"
+        className="scroll-mt-10 bg-[#EEE6FA] px-6 py-24 text-black"
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, amount: 0.22 }}
+        variants={stagger}
+    >
+        <div className="mx-auto max-w-[88rem]">
+            <motion.div variants={fadeUp} className="mb-12 max-w-3xl">
+                <p className="mb-2 text-sm font-medium uppercase tracking-[0.14em] text-black/45">
+                    Safety model
+                </p>
+                <h2 className="text-4xl font-medium leading-tight md:text-5xl">
+                    Autonomy with visible brakes.
+                </h2>
+            </motion.div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+                {SAFETY.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                        <motion.article key={item.title} variants={fadeUp} className="min-h-72 rounded-lg bg-white p-7 shadow-sm">
+                            <Icon className="h-9 w-9 text-[#7C3AED]" />
+                            <h3 className="mt-9 text-2xl font-medium">{item.title}</h3>
+                            <p className="mt-4 leading-relaxed text-black/60">{item.text}</p>
+                        </motion.article>
+                    );
+                })}
+            </div>
+        </div>
+    </motion.section>
+);
+
+const McpSection = () => (
+    <motion.section
+        id="mcp"
+        className="scroll-mt-10 bg-[#F7F2FF] px-6 py-24 text-black"
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, amount: 0.22 }}
+        variants={stagger}
+    >
+        <div className="mx-auto grid max-w-[88rem] grid-cols-1 items-center gap-10 md:grid-cols-2">
+            <motion.div variants={fadeUp}>
+                <p className="mb-2 text-sm font-medium uppercase tracking-[0.14em] text-black/45">
+                    MCP native
+                </p>
+                <h2 className="text-5xl font-medium leading-none md:text-6xl">
+                    Let another agent drive it.
+                </h2>
+                <p className="mt-6 max-w-lg text-base leading-relaxed text-black/60">
+                    The project ships its own stdio MCP server so clients can inspect yield snapshots,
+                    request proposals, quote LP routes, execute guarded moves, and read agent state.
+                </p>
+                <div className="mt-8">
+                    <ArrowPill label="Open dashboard" href="/dashboard/agent" />
+                </div>
+            </motion.div>
+
+            <motion.div variants={softScale} className="rounded-2xl bg-[#241338] p-6 text-white">
+                <div className="mb-5 flex items-center gap-3">
+                    <Coins className="h-6 w-6 text-[#E9D5FF]" />
+                    <p className="text-lg font-medium">Agent tools</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                    {MCP_TOOLS.map((tool) => (
+                        <code key={tool} className="rounded-lg bg-white/8 px-4 py-4 text-sm text-[#F3E8FF]">
+                            {tool}
+                        </code>
+                    ))}
+                </div>
+            </motion.div>
+        </div>
+    </motion.section>
+);
+
+const CtaSection = () => (
+    <motion.section
+        className="bg-[#F7F2FF] px-6 pb-20 text-black"
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, amount: 0.3 }}
+    >
+        <motion.div variants={softScale} className="mx-auto flex max-w-[88rem] flex-col items-start justify-between gap-8 rounded-2xl bg-black p-8 text-white md:flex-row md:items-center md:p-12">
+            <div>
+                <p className="mb-2 text-sm font-medium uppercase tracking-[0.14em] text-white/45">
+                    Demo ready
+                </p>
+                <h2 className="max-w-2xl text-4xl font-medium leading-tight md:text-5xl">
+                    Show the monitor, proposal, policy, MCP tools, and execution trail.
+                </h2>
+            </div>
+            <ArrowPill label="Launch agent" href="/dashboard/agent" light />
+        </motion.div>
+    </motion.section>
+);
+
+const Footer = () => (
+    <footer className="bg-[#F7F2FF] px-6 pb-8 text-black">
+        <div className="mx-auto max-w-[88rem] border-t border-black/10 pt-8">
+            <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
+                <div className="max-w-sm">
+                    <Link href="/" className="flex items-center gap-2">
+                        <LogoIcon className="h-7 w-7 text-black" />
+                        <span className="text-xl font-medium tracking-tight">Waffle Trade</span>
+                    </Link>
+                    <p className="mt-3 text-sm leading-relaxed text-black/55">
+                        Autonomous yield routing on Casper with MCP control, guardrails, and a live agent dashboard.
                     </p>
-                    <Link href="/enterprise" className="inline-flex items-center gap-3 text-black font-medium">
-                        <span className="w-9 h-9 rounded-full bg-white/80 backdrop-blur flex items-center justify-center group-hover:bg-white transition-colors">
-                            <ArrowRight className="w-4 h-4 text-black" />
-                        </span>
-                        Know more
+                </div>
+
+                <div className="flex flex-wrap gap-x-7 gap-y-3 text-sm font-medium text-black/60">
+                    {NAV_LINKS.map((link) => (
+                        <Link key={link.href} href={link.href} className="transition-colors hover:text-black">
+                            {link.label}
+                        </Link>
+                    ))}
+                    <Link href="/dashboard/agent" className="transition-colors hover:text-black">
+                        Dashboard
                     </Link>
                 </div>
             </div>
+
+            <div className="mt-10 flex flex-col gap-3 text-xs text-black/42 md:flex-row md:items-center md:justify-between">
+                <p>© 2026 Waffle Trade. Built for Casper testnet demos.</p>
+                <p>Not financial advice. Review every live transaction before signing.</p>
+            </div>
         </div>
-    </section>
+    </footer>
 );
 
 const HomePage = () => {
+    useEffect(() => {
+        const root = document.documentElement;
+        const previous = root.style.scrollBehavior;
+        root.style.scrollBehavior = "smooth";
+        return () => {
+            root.style.scrollBehavior = previous;
+        };
+    }, []);
+
     return (
-        <div className="flex flex-col bg-[#F5F5F5]">
-            <div className="h-screen flex flex-col overflow-hidden">
-                <Navbar />
-                <HeroSection />
-            </div>
-            <InfoSection />
-            <BackedBySection />
-            <UseCasesSection />
+        <div className="min-h-screen bg-[#F7F2FF]">
+            <Navbar />
+            <HeroSection />
+            <ProductSection />
+            <AutonomySection />
+            <SafetySection />
+            <McpSection />
+            <CtaSection />
+            <Footer />
         </div>
     );
 };

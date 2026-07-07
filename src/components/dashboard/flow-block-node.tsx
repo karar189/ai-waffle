@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState } from "react";
-import { Handle, type NodeProps, Position, useReactFlow } from "@xyflow/react";
+import { Handle, type Node, type NodeProps, Position, useReactFlow } from "@xyflow/react";
 import {
   Bell,
   TrendingUp,
@@ -62,6 +62,8 @@ export type BlockNodeData = {
   params?: BlockEditableParams;
 };
 
+type BlockFlowNode = Node<BlockNodeData>;
+
 function displayLabel(data: BlockNodeData): string {
   const base = data.label;
   const p = data.params;
@@ -78,8 +80,8 @@ function displayLabel(data: BlockNodeData): string {
   return `${base} (${parts.join(", ")})`;
 }
 
-function BlockNodeComponent({ id, data }: NodeProps<BlockNodeData>) {
-  const { setNodes } = useReactFlow<BlockNodeData>();
+function BlockNodeComponent({ id, data }: NodeProps<BlockFlowNode>) {
+  const { setNodes } = useReactFlow<BlockFlowNode>();
   const [open, setOpen] = useState(false);
   const type = data.blockType ?? "trigger";
   const Icon = (data.iconName && ICON_MAP[data.iconName]) || BarChart3;

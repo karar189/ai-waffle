@@ -1,4 +1,3 @@
-import { Inter, DM_Sans } from "next/font/google";
 import localFont from "next/font/local";
 
 export const aeonik = localFont({
@@ -27,7 +26,7 @@ export const aeonik = localFont({
     variable: "--font-aeonik",
 });
 
-export const inter = Inter({
-    subsets: ["latin"],
+export const inter = localFont({
+    src: "../../../public/fonts/AeonikPro-Regular.woff2",
     variable: "--font-inter",
 });

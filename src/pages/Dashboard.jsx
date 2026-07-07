@@ -1,7 +1,7 @@
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/router';
 
 export default function Dashboard() {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   return (
     <div className="dark min-h-screen bg-slate-950 text-slate-100">
@@ -9,7 +9,7 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => router.push('/')}
               className="text-lg font-semibold text-white hover:text-indigo-400 transition-colors"
             >
               Trading Copilot
@@ -17,7 +17,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-400">Demo User</span>
               <button
-                onClick={() => navigate('/')}
+                onClick={() => router.push('/')}
                 className="rounded-lg border border-slate-600 bg-slate-800/50 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
               >
                 Logout

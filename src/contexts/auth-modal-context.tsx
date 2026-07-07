@@ -31,6 +31,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!searchParams) return;
     const auth = searchParams.get("auth");
     if (auth === "signin") {
       setMode("signin");

@@ -50,7 +50,7 @@ const server = new McpServer({
 server.registerTool(
   "get_yield_snapshot",
   {
-    title: "Get Casper yield snapshot",
+    title: "Get Waffle Trade yield snapshot",
     description:
       "Live, normalized, risk-adjusted ranking of Casper yield venues (validators; LP optional). Real data from CSPR.cloud.",
     inputSchema: { includeLp: z.boolean().optional() },

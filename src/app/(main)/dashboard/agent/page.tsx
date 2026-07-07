@@ -180,10 +180,10 @@ export default function AgentDashboardPage() {
         <div>
           <h1 className="flex items-center gap-2 text-3xl md:text-4xl font-medium tracking-tight text-black" style={{ letterSpacing: "-0.03em" }}>
             <Bot className="size-8 text-[#2B2644]" />
-            Yield-Routing Agent
+            Waffle Trade Agent
           </h1>
           <p className="mt-1 text-sm text-black/60">
-            Autonomous Casper yield monitoring, decisions, and rebalancing over MCP.
+            Autonomous yield monitoring, decisions, and rebalancing over MCP on Casper.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
