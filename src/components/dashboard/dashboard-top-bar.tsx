@@ -21,6 +21,7 @@ import { agentApi } from "@/lib/agent/client";
 const NAV_ITEMS = [
   { label: "Overview", href: "/dashboard" },
   { label: "Agent", href: "/dashboard/agent" },
+  { label: "Markets", href: "/dashboard/markets" },
 ];
 
 const SETTINGS_MENU_ITEMS = [
