@@ -229,10 +229,13 @@ const HeroSection = () => (
                         <Network className="h-4 w-4 text-[#7C3AED]" />
                         Autonomous yield routing by Waffle Trade
                     </motion.div>
-                    <motion.h1 variants={fadeUp} className="max-w-3xl text-5xl font-medium leading-tight text-black md:text-7xl">
+                    <motion.h1
+                        variants={fadeUp}
+                        className="font-roboto max-w-3xl text-5xl font-medium leading-[1.1] tracking-tight text-black md:text-7xl"
+                    >
                         Waffle Trade,
                         <br />
-                        on autopilot.
+                        on <span className="font-bodoni italic">autopilot</span>.
                     </motion.h1>
                     <motion.p variants={fadeUp} className="mt-5 max-w-lg text-base leading-relaxed text-black/68 md:text-lg">
                         A self-driving protocol that monitors live Casper yields, proposes safer reallocations,

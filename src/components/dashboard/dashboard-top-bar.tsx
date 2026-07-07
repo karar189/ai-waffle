@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { label: "Overview", href: "/dashboard" },
   { label: "Agent", href: "/dashboard/agent" },
   { label: "Markets", href: "/dashboard/markets" },
+  { label: "Studio", href: "/dashboard/studio" },
 ];
 
 const SETTINGS_MENU_ITEMS = [

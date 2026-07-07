@@ -86,6 +86,8 @@ const config = {
       fontFamily: {
         "heading": ["var(--font-aeonik)"],
         "default": ["'TT Norms Pro'", "var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
+        "roboto": ["var(--font-roboto)", "sans-serif"],
+        "bodoni": ["var(--font-bodoni)", "serif"],
       },
       keyframes: {
         "accordion-down": {

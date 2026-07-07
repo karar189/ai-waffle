@@ -2,7 +2,7 @@ import { AuthModalWrapper } from "@/components/auth/auth-modal-wrapper";
 import { Providers } from "@/components";
 import { Toaster } from "@/components/ui/sonner";
 import "@/styles/globals.css";
-import { aeonik, inter } from "@/utils/constants/fonts";
+import { aeonik, bodoniModa, inter, roboto } from "@/utils/constants/fonts";
 import { cn, generateMetadata } from "@/utils";
 import { Suspense } from "react";
 
@@ -20,6 +20,8 @@ export default function RootLayout({
                     "min-h-screen bg-neutral-950 text-neutral-100 antialiased !font-default",
                     aeonik.variable,
                     inter.variable,
+                    roboto.variable,
+                    bodoniModa.variable,
                 )}
             >
                 <Providers>
