@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "casper-yield-router": {
+      "command": "node",
+      "args": ["--env-file=.env", "mcp-server/server.mjs"],
+      "env": {
+        "AGENT_API_BASE": "http://localhost:3001"
+      }
+    },
+    "cspr_cloud_testnet": {
+      "url": "https://mcp.testnet.cspr.cloud/mcp",
+      "headers": {
+        "X-CSPR-Cloud-Api-Key": "${CSPR_CLOUD_API_KEY}"
+      }
+    }
+  }
+}
