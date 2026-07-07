@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Settings, LogOut, Wallet, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { cn } from "@/utils";
-import { LogoIcon } from "@/components/halo/logo-icon";
+import brandLogo from "@/assets/image.png";
 import {
   DropdownMenu,
   DropdownMenuContent,

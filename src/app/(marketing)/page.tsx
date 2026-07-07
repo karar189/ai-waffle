@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -17,7 +18,7 @@ import {
     Sparkles,
     Zap,
 } from "lucide-react";
-import { LogoIcon } from "@/components/halo/logo-icon";
+import brandLogo from "@/assets/image.png";
 
 const NAV_LINKS = [
     { label: "Product", href: "#product" },
@@ -119,9 +120,15 @@ const Navbar = () => (
         transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
     >
         <div className="mx-auto flex max-w-[88rem] items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-                <LogoIcon className="h-7 w-7 text-black" />
-                <span className="text-2xl font-medium tracking-tight text-black">Waffle Trade</span>
+            <Link href="/" className="flex items-center">
+                <Image
+                    src={brandLogo}
+                    alt="Waffle Trade"
+                    width={60}
+                    height={60}
+                    className="h-14 w-14 object-contain"
+                    priority
+                />
             </Link>
 
             <div className="hidden items-center gap-8 md:flex">
@@ -200,17 +207,21 @@ const HeroSection = () => (
                 muted
                 loop
                 playsInline
-                className="absolute inset-0 h-full w-full object-cover opacity-70"
+                className="absolute inset-0 h-full w-full object-cover"
             >
                 <source
                     src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260423_161253_c72b1869-400f-45ed-ac0c-52f68c2ed5bd.mp4"
                     type="video/mp4"
                 />
             </video>
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(247,242,255,0.94),rgba(247,242,255,0.66)_46%,rgba(247,242,255,0.22))]" />
 
             <div className="relative z-10 flex h-full w-full flex-col justify-between p-8 pt-28 md:p-12 md:pt-36">
-                <motion.div variants={stagger} initial="hidden" animate="show">
+                <motion.div
+                    variants={stagger}
+                    initial="hidden"
+                    animate="show"
+                    className="max-w-4xl rounded-[2rem] bg-white/62 p-6 backdrop-blur-sm md:p-8"
+                >
                     <motion.div
                         variants={fadeUp}
                         className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-medium text-black/65 backdrop-blur"
@@ -476,9 +487,14 @@ const Footer = () => (
         <div className="mx-auto max-w-[88rem] border-t border-black/10 pt-8">
             <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
                 <div className="max-w-sm">
-                    <Link href="/" className="flex items-center gap-2">
-                        <LogoIcon className="h-7 w-7 text-black" />
-                        <span className="text-xl font-medium tracking-tight">Waffle Trade</span>
+                    <Link href="/" className="flex items-center">
+                        <Image
+                            src={brandLogo}
+                            alt="Waffle Trade"
+                            width={60}
+                            height={60}
+                            className="h-14 w-14 object-contain"
+                        />
                     </Link>
                     <p className="mt-3 text-sm leading-relaxed text-black/55">
                         Autonomous yield routing on Casper with MCP control, guardrails, and a live agent dashboard.
