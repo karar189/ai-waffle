@@ -11,6 +11,7 @@ import {
   ArrowRight,
   ExternalLink,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import {
   Pie,
@@ -368,14 +369,22 @@ export default function AgentDashboardPage() {
                 </Badge>
               </div>
               <p className="text-sm leading-relaxed text-black/70">{proposal.reasoning}</p>
+              {status?.decisions[0]?.llm && (
+                <AiVerdict llm={status.decisions[0].llm} />
+              )}
               <Button className="rounded-full bg-black text-white hover:bg-gray-800" onClick={execute} disabled={busy}>
                 Execute rebalance
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-black/50">
-              {status?.decisions[0]?.noActionReason ?? "No rebalance suggested right now."}
-            </p>
+            <div className="space-y-3">
+              <p className="text-sm text-black/50">
+                {status?.decisions[0]?.noActionReason ?? "No rebalance suggested right now."}
+              </p>
+              {status?.decisions[0]?.llm && (
+                <AiVerdict llm={status.decisions[0].llm} />
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -454,6 +463,20 @@ export default function AgentDashboardPage() {
                       )})`
                     : d.noActionReason ?? "No action"}
                 </p>
+                {d.llm && (
+                  <p className="mt-1 text-xs italic text-black/50">
+                    <span
+                      className={
+                        d.llm.verdict === "hold"
+                          ? "font-medium text-amber-600"
+                          : "font-medium text-emerald-600"
+                      }
+                    >
+                      AI {d.llm.verdict}
+                    </span>{" "}
+                    — {d.llm.rationale}
+                  </p>
+                )}
               </div>
             ))}
             {!status?.decisions.length && (
@@ -534,6 +557,34 @@ function StatCard({
         <p className="truncate text-xs text-black/50">{sub}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function AiVerdict({
+  llm,
+}: {
+  llm: { verdict: "proceed" | "hold"; rationale: string; confidence: number; model: string };
+}) {
+  const hold = llm.verdict === "hold";
+  return (
+    <div
+      className={`rounded-xl border p-3 ${
+        hold ? "border-amber-500/30 bg-amber-50/60" : "border-emerald-500/30 bg-emerald-50/60"
+      }`}
+    >
+      <div className="mb-1 flex items-center gap-2">
+        <Sparkles className={`size-4 ${hold ? "text-amber-600" : "text-emerald-600"}`} />
+        <span className="text-xs font-medium text-black/70">
+          AI verdict:{" "}
+          <span className={hold ? "text-amber-600" : "text-emerald-600"}>{llm.verdict}</span>
+        </span>
+        <Badge variant="outline" className="h-4 border-black/10 px-1 text-[10px] text-black/50">
+          {(llm.confidence * 100).toFixed(0)}% confident
+        </Badge>
+      </div>
+      <p className="text-sm leading-relaxed text-black/70">{llm.rationale}</p>
+      <p className="mt-1 text-[10px] text-black/40">{llm.model}</p>
+    </div>
   );
 }
 

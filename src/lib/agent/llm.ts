@@ -35,7 +35,22 @@ export interface DecisionContext {
 }
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = process.env.CLAUDE_MODEL ?? "claude-3-5-sonnet-latest";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const ANTHROPIC_MODEL = process.env.CLAUDE_MODEL ?? "claude-3-5-sonnet-latest";
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+
+/**
+ * Which provider to use. Explicit LLM_PROVIDER wins; otherwise prefer whichever
+ * key is present (OpenAI first, since that's what's funded here).
+ */
+function resolveProvider(): "openai" | "anthropic" | null {
+  const explicit = process.env.LLM_PROVIDER?.toLowerCase();
+  if (explicit === "openai" && process.env.OPENAI_API_KEY) return "openai";
+  if (explicit === "anthropic" && process.env.CLAUDE_API_KEY) return "anthropic";
+  if (process.env.OPENAI_API_KEY) return "openai";
+  if (process.env.CLAUDE_API_KEY) return "anthropic";
+  return null;
+}
 
 const SYSTEM_PROMPT = `You are the reasoning module of an autonomous yield-routing agent operating on the Casper blockchain.
 
@@ -65,15 +80,104 @@ function extractJson(text: string): unknown | null {
   }
 }
 
+function normalizeAssessment(
+  parsed: { verdict?: string; rationale?: string; confidence?: number } | null,
+  model: string
+): LlmAssessment | null {
+  if (!parsed || (parsed.verdict !== "proceed" && parsed.verdict !== "hold")) {
+    return null;
+  }
+  return {
+    verdict: parsed.verdict,
+    rationale: parsed.rationale?.trim() || "(no rationale returned)",
+    confidence:
+      typeof parsed.confidence === "number"
+        ? Math.max(0, Math.min(1, parsed.confidence))
+        : 0.5,
+    model,
+  };
+}
+
+async function assessWithAnthropic(
+  userContent: string,
+  signal: AbortSignal
+): Promise<LlmAssessment | null> {
+  const res = await fetch(ANTHROPIC_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": process.env.CLAUDE_API_KEY!,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 400,
+      system: SYSTEM_PROMPT,
+      messages: [
+        { role: "user", content: `Decision context:\n${userContent}\n\nReturn only the JSON verdict.` },
+      ],
+    }),
+    signal,
+  });
+  if (!res.ok) {
+    console.error("[agent/llm] Anthropic error", res.status, await res.text());
+    return null;
+  }
+  const data = (await res.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  const text = data.content?.map((c) => c.text ?? "").join("").trim() ?? "";
+  return normalizeAssessment(
+    extractJson(text) as { verdict?: string; rationale?: string; confidence?: number } | null,
+    ANTHROPIC_MODEL
+  );
+}
+
+async function assessWithOpenAI(
+  userContent: string,
+  signal: AbortSignal
+): Promise<LlmAssessment | null> {
+  const res = await fetch(OPENAI_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${process.env.OPENAI_API_KEY!}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      max_tokens: 400,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: `Decision context:\n${userContent}\n\nReturn only the JSON verdict.` },
+      ],
+    }),
+    signal,
+  });
+  if (!res.ok) {
+    console.error("[agent/llm] OpenAI error", res.status, await res.text());
+    return null;
+  }
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const text = data.choices?.[0]?.message?.content?.trim() ?? "";
+  return normalizeAssessment(
+    extractJson(text) as { verdict?: string; rationale?: string; confidence?: number } | null,
+    OPENAI_MODEL
+  );
+}
+
 /**
- * Ask Claude to assess a decision. Best-effort: returns null if no API key is
- * configured or the call fails, so the agent still works deterministically.
+ * Ask the configured LLM to assess a decision. Best-effort: returns null if no
+ * provider key is configured or the call fails, so the agent still works
+ * deterministically.
  */
 export async function assessWithLlm(
   ctx: DecisionContext
 ): Promise<LlmAssessment | null> {
-  const apiKey = process.env.CLAUDE_API_KEY;
-  if (!apiKey) return null;
+  const provider = resolveProvider();
+  if (!provider) return null;
 
   const userContent = JSON.stringify(
     {
@@ -113,53 +217,9 @@ export async function assessWithLlm(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
-        max_tokens: 400,
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: `Decision context:\n${userContent}\n\nReturn only the JSON verdict.`,
-          },
-        ],
-      }),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      console.error("[agent/llm] Anthropic error", res.status, await res.text());
-      return null;
-    }
-
-    const data = (await res.json()) as {
-      content?: Array<{ type: string; text?: string }>;
-    };
-    const text =
-      data.content?.map((c) => c.text ?? "").join("").trim() ?? "";
-    const parsed = extractJson(text) as
-      | { verdict?: string; rationale?: string; confidence?: number }
-      | null;
-    if (!parsed || (parsed.verdict !== "proceed" && parsed.verdict !== "hold")) {
-      return null;
-    }
-
-    return {
-      verdict: parsed.verdict,
-      rationale: parsed.rationale?.trim() || "(no rationale returned)",
-      confidence:
-        typeof parsed.confidence === "number"
-          ? Math.max(0, Math.min(1, parsed.confidence))
-          : 0.5,
-      model: DEFAULT_MODEL,
-    };
+    return provider === "openai"
+      ? await assessWithOpenAI(userContent, controller.signal)
+      : await assessWithAnthropic(userContent, controller.signal);
   } catch (e) {
     console.error("[agent/llm] assessment failed:", e);
     return null;
