@@ -240,17 +240,17 @@ cp .env.example .env   # then fill in the values below
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `CSPR_CLOUD_API_KEY` | ✅ | CSPR.cloud access token. Server-side only. |
-| `CASPER_NETWORK` | – | `testnet` (default) or `mainnet`. |
-| `OPENAI_API_KEY` | – | Enables the OpenAI reasoning layer (preferred when set). |
-| `CLAUDE_API_KEY` | – | Alternative reasoning provider. |
-| `LLM_PROVIDER` | – | Force `openai` or `anthropic`. |
-| `OPENAI_MODEL` / `CLAUDE_MODEL` | – | Override the model (defaults: `gpt-4o-mini` / `claude-3-5-sonnet-latest`). |
-| `CASPER_SESSION_PRIVATE_KEY_HEX` / `_PEM` | – | Optional funded session key to enable **auto-signed** on-chain moves. Without it, every move needs Casper Wallet approval. |
-| `AGENT_API_BASE` | – | Base URL the MCP server uses to reach the app (default `http://localhost:3001`). |
-| `WCSPR_CONTRACT_PACKAGE_HASH` | – | WCSPR package hash for LP pricing/execution (testnet built in; set for mainnet). |
-| `CSPR_TRADE_ROUTER_PACKAGE_HASH` | – | CSPR.trade router package for LP execution (testnet built in; set for mainnet). |
-| `WAFFLE_AGENT_POLICY_PACKAGE_HASH` | – | Waffle Trade Agent Policy contract package hash. Enables on-chain policy registration and intent auditing. |
+| `CSPR_CLOUD_API_KEY` | | CSPR.cloud access token. Server-side only. |
+| `CASPER_NETWORK` |  | `testnet` (default) or `mainnet`. |
+| `OPENAI_API_KEY` |  | Enables the OpenAI reasoning layer (preferred when set). |
+| `CLAUDE_API_KEY` |  | Alternative reasoning provider. |
+| `LLM_PROVIDER` |  | Force `openai` or `anthropic`. |
+| `OPENAI_MODEL` / `CLAUDE_MODEL` |  | Override the model (defaults: `gpt-4o-mini` / `claude-3-5-sonnet-latest`). |
+| `CASPER_SESSION_PRIVATE_KEY_HEX` / `_PEM` | | Optional funded session key to enable **auto-signed** on-chain moves. Without it, every move needs Casper Wallet approval. |
+| `AGENT_API_BASE` |  | Base URL the MCP server uses to reach the app (default `http://localhost:3001`). |
+| `WCSPR_CONTRACT_PACKAGE_HASH` | | WCSPR package hash for LP pricing/execution (testnet built in; set for mainnet). |
+| `CSPR_TRADE_ROUTER_PACKAGE_HASH` | | CSPR.trade router package for LP execution (testnet built in; set for mainnet). |
+| `WAFFLE_AGENT_POLICY_PACKAGE_HASH` | | Waffle Trade Agent Policy contract package hash. Enables on-chain policy registration and intent auditing. |
 
 > The agent works read-only with just `CSPR_CLOUD_API_KEY`. Add an LLM key to enable the reasoning/veto layer, and a session key (or use Casper Wallet) to execute real transactions.
 
