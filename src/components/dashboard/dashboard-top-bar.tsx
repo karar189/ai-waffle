@@ -96,9 +96,14 @@ export function DashboardTopBar() {
     <header className="relative z-30 flex h-20 shrink-0 items-center justify-between border-b border-black/10 bg-white/95 px-5 backdrop-blur-xl md:px-8">
       {/* Left: brand */}
       <Link href="/dashboard" className="flex shrink-0 items-center gap-3">
-        <span className="flex size-11 items-center justify-center rounded-xl bg-black text-white">
-          <LogoIcon className="size-6" />
-        </span>
+        <Image
+          src={brandLogo}
+          alt="Waffle Trade"
+          width={56}
+          height={56}
+          className="h-12 w-12 object-contain"
+          priority
+        />
         <span className="text-2xl font-medium tracking-tight text-black">Waffle Trade</span>
       </Link>
 
