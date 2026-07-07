@@ -2,6 +2,7 @@
 node_modules
 .pnp
 .pnp.js
+.pnpm-store
 
 # Build / output
 .next
@@ -10,6 +11,8 @@ dist
 build
 .turbo
 *.tsbuildinfo
+target
+contracts/**/target
 
 # Environment variables (never commit secrets)
 .env
@@ -44,9 +47,6 @@ coverage
 
 # Vercel
 .vercel
-
-# Reference folder (not to be pushed)
-/reference
 
 # Misc
 *.pem

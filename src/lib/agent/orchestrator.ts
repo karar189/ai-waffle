@@ -18,6 +18,10 @@ import {
   signAndSubmit,
 } from "@/lib/casper/deploy";
 import { getSessionKey, getSessionPublicKeyHex } from "@/lib/casper/keys";
+import {
+  buildRecordIntentTransaction,
+  isAgentPolicyConfigured,
+} from "@/lib/casper/agent-policy";
 import { findLpSnapshot, executeLpDeposit, executeLpWithdraw } from "./lp";
 import {
   getState,
@@ -146,6 +150,24 @@ async function resolveAccount(): Promise<string> {
   );
 }
 
+async function recordOnChainIntentIfConfigured(
+  proposal: RebalanceProposal,
+  decisionId: string,
+  account: string
+): Promise<void> {
+  if (!isAgentPolicyConfigured()) return;
+  const sessionKey = await getSessionKey();
+  if (!sessionKey) return;
+  if ((await sessionKey.publicKey.toHex()) !== account) return;
+
+  const tx = buildRecordIntentTransaction({
+    fromPublicKeyHex: account,
+    decisionId,
+    proposal,
+  });
+  await signAndSubmit(tx, sessionKey);
+}
+
 export interface ExecuteResult {
   execution: ExecutionRecord;
   /** Unsigned transaction JSON for Casper Wallet, when human approval is needed. */
@@ -178,6 +200,7 @@ export async function executeProposal(
         `LP venue ${proposal.fromVenueId} is not CSPR-executable (needs a WCSPR-paired pool).`
       );
     }
+    await recordOnChainIntentIfConfigured(proposal, decisionId, account);
     return executeLpWithdraw({
       account,
       lp: snapshot.lp,
@@ -203,6 +226,7 @@ export async function executeProposal(
         `LP venue ${proposal.toVenueId} is not CSPR-executable (needs a WCSPR-paired pool).`
       );
     }
+    await recordOnChainIntentIfConfigured(proposal, decisionId, account);
     return executeLpDeposit({
       account,
       lp: snapshot.lp,
@@ -215,6 +239,7 @@ export async function executeProposal(
   }
 
   const account = await resolveAccount();
+  await recordOnChainIntentIfConfigured(proposal, decisionId, account);
 
   const toValidator = validatorHexFromVenueId(proposal.toVenueId);
   if (!toValidator) {
