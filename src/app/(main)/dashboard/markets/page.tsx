@@ -140,7 +140,7 @@ export default function MarketsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [venue, setVenue] = useState<VenueTab>("all");
+  const [venue, setVenue] = useState<VenueTab>("dex");
   const [contractType, setContractType] = useState<CasperMarketContractType>("spot");
 
   const load = async (mode: "initial" | "refresh" = "initial") => {
@@ -241,6 +241,11 @@ export default function MarketsPage() {
     ? visibleOiValues.reduce((sum, value) => sum + value, 0)
     : null;
   const topRow = visibleRows[0] ?? null;
+  const allDexRows = useMemo(
+    () => data ? [...data.dex.spot, ...data.dex.linear_perp, ...data.dex.inverse_perp] : [],
+    [data]
+  );
+  const dexVolume = allDexRows.reduce((sum, row) => sum + (row.volume24h ?? 0), 0);
 
   const exportCsv = () => {
     if (!visibleRows.length) return;
@@ -360,13 +365,9 @@ export default function MarketsPage() {
           />
           <SummaryCard
             icon={<CandlestickChart className="size-4" />}
-            label="Open interest"
-            value={loading ? "…" : fmtUsd(visibleOi)}
-            sub={
-              contractType === "spot"
-                ? "Spot markets do not report OI"
-                : "Visible contract interest"
-            }
+            label="Native DEX rows"
+            value={loading ? "…" : String(allDexRows.length)}
+            sub={`${fmtUsd(dexVolume)} DEX volume`}
           />
           <SummaryCard
             icon={<BarChart3 className="size-4" />}
@@ -382,6 +383,60 @@ export default function MarketsPage() {
           </div>
         )}
       </div>
+
+      <section className={cn(CARD, "mx-auto w-full max-w-[92rem] p-5")}>
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-lg font-medium text-black">Native DEX markets</h2>
+            <p className="mt-1 text-sm text-black/55">
+              CSPR.cloud DEX rows are shown separately here and are also available through the DEX tab below.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="mt-3 w-fit rounded-full border-black/10 bg-white text-black/70 hover:bg-black/5 sm:mt-0"
+            onClick={() => setVenue("dex")}
+          >
+            Show DEX table
+          </Button>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {loading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-32 animate-pulse rounded-2xl bg-black/[0.04]" />
+            ))
+          ) : allDexRows.length ? (
+            allDexRows.slice(0, 4).map((row) => (
+              <div key={row.id} className="rounded-2xl border border-violet-500/10 bg-violet-50/70 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-black">{row.exchange}</p>
+                    <p className="mt-1 truncate text-sm text-black/45">{row.symbol}</p>
+                  </div>
+                  <Badge className="border border-violet-200 bg-white text-violet-700">DEX</Badge>
+                </div>
+                <div className="mt-5 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-xs text-black/45">24h volume</p>
+                    <p className="text-xl font-medium text-black">{fmtUsd(row.volume24h)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-black/45">Price</p>
+                    <p className="text-sm font-medium text-violet-700">
+                      {fmtUsd(row.price, row.price !== null && row.price < 1 ? 5 : 2)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-black/10 bg-black/[0.02] p-5 text-sm text-black/50 md:col-span-2 xl:col-span-4">
+              No DEX markets returned yet. Refresh after CSPR.cloud market data is available.
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className={cn(BOARD, "mx-auto w-full max-w-[92rem] overflow-hidden")}>
         <div className="border-b border-black/10 px-5 py-5 md:px-6">

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Settings, LogOut, Wallet } from "lucide-react";
+import { Settings, LogOut, Wallet, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { cn } from "@/utils";
@@ -93,28 +93,26 @@ export function DashboardTopBar() {
       : "Connect wallet";
 
   return (
-    <header className="relative z-30 flex h-16 shrink-0 items-center justify-between border-b border-black/10 bg-white px-4 md:px-6">
+    <header className="relative z-30 flex h-20 shrink-0 items-center justify-between border-b border-black/10 bg-white/95 px-5 backdrop-blur-xl md:px-8">
       {/* Left: brand */}
-      <Link href="/dashboard" className="flex items-center shrink-0">
-        <Image
-          src={brandLogo}
-          alt="Waffle Trade"
-          width={56}
-          height={56}
-          className="h-12 w-12 object-contain"
-          priority
-        />
+      <Link href="/dashboard" className="flex shrink-0 items-center gap-3">
+        <span className="flex size-11 items-center justify-center rounded-xl bg-black text-white">
+          <LogoIcon className="size-6" />
+        </span>
+        <span className="text-2xl font-medium tracking-tight text-black">Waffle Trade</span>
       </Link>
 
       {/* Center: nav links */}
-      <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 md:flex">
+      <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center rounded-full bg-black/[0.03] p-1 md:flex">
         {NAV_ITEMS.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             className={cn(
-              "text-base font-medium transition-colors duration-200",
-              isActive(item.href) ? "text-black" : "text-gray-700 hover:text-black"
+              "rounded-full px-5 py-2 text-base font-medium transition-all duration-200",
+              isActive(item.href)
+                ? "bg-white text-black shadow-sm ring-1 ring-black/5"
+                : "text-black/55 hover:bg-white/60 hover:text-black"
             )}
           >
             {item.label}
@@ -128,17 +126,18 @@ export function DashboardTopBar() {
           type="button"
           onClick={connectWallet}
           disabled={connecting}
-          className="inline-flex h-10 items-center gap-2 rounded-full bg-black px-6 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-70"
+          className="inline-flex h-12 items-center gap-2 rounded-full bg-black px-5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#241338] disabled:opacity-70"
         >
           <Wallet className="size-4" />
           <span className={account ? "font-mono text-xs" : ""}>{walletLabel}</span>
+          <ChevronDown className="size-3.5 text-white/55" />
         </button>
 
         {/* Settings */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-10 text-gray-600 hover:bg-black/5 hover:text-black rounded-full" aria-label="Settings">
-              <Settings className="size-5" />
+            <Button variant="ghost" size="icon" className="size-12 rounded-full text-black/58 hover:bg-violet-50 hover:text-black" aria-label="Settings">
+              <Settings className="size-6" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[12rem] rounded-2xl border border-black/10 bg-white py-1.5 shadow-xl text-black" sideOffset={8}>
