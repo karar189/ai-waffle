@@ -21,11 +21,14 @@ export async function POST(req: NextRequest) {
     const { decision, proposal } = await monitorAndDecide(mode);
 
     let execution = null;
+    // The LLM can veto ("hold") an otherwise-valid auto move.
+    const llmVetoed = decision.llm?.verdict === "hold";
     if (
       body.autoExecute &&
       proposal &&
       proposal.signingPath === "auto" &&
-      mode === "live"
+      mode === "live" &&
+      !llmVetoed
     ) {
       const state = await getState();
       if (state.running && !state.policy.paused && !state.policy.emergencyStop) {
@@ -34,7 +37,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ decision, proposal, execution });
+    return NextResponse.json({ decision, proposal, execution, llmVetoed });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "monitor failed" },
