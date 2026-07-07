@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Settings, LogOut, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { cn } from "@/utils";
-import { LogoIcon } from "@/components/halo/logo-icon";
+import brandLogo from "@/assets/image.png";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -94,9 +95,15 @@ export function DashboardTopBar() {
   return (
     <header className="relative z-30 flex h-16 shrink-0 items-center justify-between border-b border-black/10 bg-white px-4 md:px-6">
       {/* Left: brand */}
-      <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
-        <LogoIcon className="w-7 h-7 text-black" />
-        <span className="text-xl font-medium tracking-tight text-black">Halo</span>
+      <Link href="/dashboard" className="flex items-center shrink-0">
+        <Image
+          src={brandLogo}
+          alt="Waffle Trade"
+          width={56}
+          height={56}
+          className="h-12 w-12 object-contain"
+          priority
+        />
       </Link>
 
       {/* Center: nav links */}
