@@ -1,10 +1,9 @@
 "use client";
 
-import { createConfig, http } from "wagmi";
+import { createConfig, http, injected } from "@wagmi/core";
 import { mainnet, arbitrum } from "wagmi/chains";
-import { injected } from "wagmi/connectors";
 
-/** MetaMask / injected wallet only. Other connectors are stubbed in next.config so the barrel doesn't break the build. */
+/** MetaMask / injected wallet only. Avoid the wagmi/connectors barrel; it imports optional connectors at build time. */
 export const wagmiConfig = createConfig({
   chains: [mainnet, arbitrum],
   transports: {

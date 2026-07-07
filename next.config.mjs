@@ -6,11 +6,9 @@ const nextConfig = {
     instrumentationHook: true,
   },
   webpack: (config) => {
-    // MetaMask only: we use wagmi's injected() connector. The wagmi/connectors barrel
-    // loads every connector (Porto, Coinbase, WalletConnect, etc.); stub their optional
-    // deps so the build resolves and we never run that code at runtime.
     config.resolve.alias = {
       ...config.resolve.alias,
+      "accounts": false,
       "porto": false,
       "porto/internal": false,
       "@base-org/account": false,
